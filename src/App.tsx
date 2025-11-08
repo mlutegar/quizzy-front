@@ -22,6 +22,7 @@ interface Message {
 
 const App = () => {
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [sessionId, setSessionId] = useState<string>("");
   const [chatMessages, setChatMessages] = useState<Message[]>([
     {
       role: "assistant",
@@ -47,7 +48,7 @@ const App = () => {
                 <Route path="/" element={<Home />} />
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/matematica" element={<Subject />} />
-                <Route path="/quiz/:topicId" element={<Quiz addMessageToChat={addMessageToChat} />} />
+                <Route path="/quiz/:topicId" element={<Quiz addMessageToChat={addMessageToChat} setSessionId={setSessionId} />} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Routes>
@@ -64,6 +65,7 @@ const App = () => {
               onClose={() => setIsChatOpen(false)}
               onMessagesChange={setChatMessages}
               initialMessages={chatMessages}
+              sessionId={sessionId}
             />
             </div>
 

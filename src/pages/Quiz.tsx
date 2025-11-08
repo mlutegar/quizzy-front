@@ -25,9 +25,10 @@ interface Question {
 
 interface QuizProps {
   addMessageToChat?: (role: "user" | "assistant", content: string) => void;
+  setSessionId?: (sessionId: string) => void;
 }
 
-const Quiz = ({ addMessageToChat }: QuizProps) => {
+const Quiz = ({ addMessageToChat, setSessionId }: QuizProps) => {
   const { topicId } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -278,6 +279,9 @@ const Quiz = ({ addMessageToChat }: QuizProps) => {
                 }}
                 onResponseSubmitted={(response) => {
                   addMessageToChat?.("user", response);
+                }}
+                onSessionIdReceived={(id) => {
+                  setSessionId?.(id);
                 }}
               />
             )}

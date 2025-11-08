@@ -21,10 +21,11 @@ interface HintSystemProps {
   onHintUsed?: (hintLevel: number) => void;
   onHintGenerated?: (hint: string) => void;
   onResponseSubmitted?: (response: string) => void;
+  onSessionIdReceived?: (sessionId: string) => void;
   className?: string;
 }
 
-export const HintSystem = ({ problem, workShown, onHintUsed, onHintGenerated, onResponseSubmitted, className }: HintSystemProps) => {
+export const HintSystem = ({ problem, workShown, onHintUsed, onHintGenerated, onResponseSubmitted, onSessionIdReceived, className }: HintSystemProps) => {
   const [hints, setHints] = useState<HintData[]>([]);
   const [currentResponse, setCurrentResponse] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -55,6 +56,7 @@ export const HintSystem = ({ problem, workShown, onHintUsed, onHintGenerated, on
         setHints(prev => [...prev, data]);
         onHintUsed?.(hints.length + 1);
         onHintGenerated?.(data.question);
+        onSessionIdReceived?.(data.session_id); // Enviar o session_id para o pai
       }
     } catch (error: any) {
       console.error('Error generating hint:', error);
@@ -78,7 +80,7 @@ export const HintSystem = ({ problem, workShown, onHintUsed, onHintGenerated, on
       // Send user response to chat
       onResponseSubmitted?.(currentResponse);
       
-      const response = await fetch(`${FLASK_API_URL}/start`, {
+      const response = await fetch(`${FLASK_API_URL}/respond`, {
         method: "POST",
         headers: {
           "Accept": "application/json",
@@ -98,7 +100,13 @@ export const HintSystem = ({ problem, workShown, onHintUsed, onHintGenerated, on
 
       // Add the new hint from the response
       if (data?.question) {
-        setHints(prev => [...prev, data]);
+        const newHint = {
+          question: data.question,
+          session_id: hint.session_id, // Manter o mesmo session_id
+          hint_level: data.hint_level,
+          phase: data.phase
+        };
+        setHints(prev => [...prev, newHint]);
         onHintGenerated?.(data.question);
       }
 
