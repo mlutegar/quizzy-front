@@ -4,8 +4,9 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Lightbulb, Loader2, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+
+const FLASK_API_URL = "http://localhost:5000";
 
 interface HintData {
   question: string;
@@ -33,11 +34,22 @@ export const HintSystem = ({ problem, workShown, onHintUsed, onHintGenerated, on
   const generateHint = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('generate-hint', {
-        body: { problem, workShown }
+      const response = await fetch(`${FLASK_API_URL}/start`, {
+        method: "POST",
+        headers: {
+          "Accept": "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          problem: `${problem}, com o desenvolvimento até então: ${workShown || 'nenhum'}`
+        }),
       });
 
-      if (error) throw error;
+      if (!response.ok) {
+        throw new Error(`Erro ao gerar dica: ${response.status}`);
+      }
+
+      const data = await response.json();
 
       if (data?.question) {
         setHints(prev => [...prev, data]);
@@ -66,14 +78,23 @@ export const HintSystem = ({ problem, workShown, onHintUsed, onHintGenerated, on
       // Send user response to chat
       onResponseSubmitted?.(currentResponse);
       
-      const { data, error } = await supabase.functions.invoke('generate-hint', {
-        body: { 
+      const response = await fetch(`${FLASK_API_URL}/start`, {
+        method: "POST",
+        headers: {
+          "Accept": "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
           response: currentResponse,
           session_id: hint.session_id
-        }
+        }),
       });
 
-      if (error) throw error;
+      if (!response.ok) {
+        throw new Error(`Erro ao enviar resposta: ${response.status}`);
+      }
+
+      const data = await response.json();
 
       // Add the new hint from the response
       if (data?.question) {
