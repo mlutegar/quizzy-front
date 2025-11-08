@@ -37,6 +37,7 @@ const Subject = () => {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [progress, setProgress] = useState<Record<string, UserProgress>>({});
   const [diagnostics, setDiagnostics] = useState<Record<string, DiagnosticResult>>({});
+  const [diagnosticCompleted, setDiagnosticCompleted] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -175,7 +176,6 @@ const Subject = () => {
             const diagnosticResult = diagnostics[topic.id];
             const masteryPercentage = topicProgress?.mastery_percentage || 0;
             const consecutiveCorrect = topicProgress?.consecutive_correct || 0;
-            const hasDiagnostic = diagnosticResult && diagnosticResult.total_questions > 0;
 
             return (
               <Card
@@ -193,8 +193,8 @@ const Subject = () => {
                         </div>
                       </div>
                       
-                      {/* Diagnostic Status */}
-                      {hasDiagnostic && (
+                      {/* Diagnostic Status - Show only if general diagnostic is complete */}
+                      {diagnosticCompleted && diagnosticResult && (
                         <div className="mt-3 p-3 bg-primary/5 rounded-lg border border-primary/20">
                           <div className="flex items-center gap-2 mb-1">
                             <span className="text-sm font-semibold text-primary">
@@ -229,9 +229,9 @@ const Subject = () => {
                       size="lg"
                     >
                       <Play className="w-4 h-4" />
-                      {!hasDiagnostic
+                      {!diagnosticCompleted
                         ? "Iniciar Diagnóstico" 
-                        : "Gerar Simulado (5 questões)"}
+                        : "Gerar Simulado (10 questões)"}
                     </Button>
                   </div>
                 </CardContent>
