@@ -130,6 +130,9 @@ const AdaptiveLearning = () => {
 
       const data = await response.json();
       console.log("✅ Questão recebida:", data);
+      console.log("📋 Question ID:", data.id);
+      console.log("📋 Concepts:", data.concepts);
+      
       setCurrentQuestion(data);
       setCurrentHint("");
       setHintLevel(0);
@@ -205,8 +208,8 @@ const AdaptiveLearning = () => {
         question: currentQuestion.problem,
         student_answer: userAnswer,
         correct_answer: String(currentQuestion.answer),
-        solution_steps: currentQuestion.steps,
-        concepts_tested: currentQuestion.concepts,
+        solution_steps: currentQuestion.steps || [],
+        concepts_tested: currentQuestion.concepts || [],
       };
 
       console.log("📡 POST para:", `${FLASK_API_URL}/adaptive/${studentId}/submit`);
@@ -218,7 +221,11 @@ const AdaptiveLearning = () => {
         body: JSON.stringify(submitBody),
       });
 
-      if (!response.ok) throw new Error("Erro ao submeter resposta");
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("❌ Erro na resposta:", errorText);
+        throw new Error(`Erro ao submeter resposta: ${response.status}`);
+      }
 
       const data = await response.json();
       console.log("✅ Resposta submetida:", data);
@@ -255,6 +262,7 @@ const AdaptiveLearning = () => {
         });
       }
     } catch (error: any) {
+      console.error("💥 Erro ao submeter:", error);
       toast({
         title: "Erro",
         description: error.message,
