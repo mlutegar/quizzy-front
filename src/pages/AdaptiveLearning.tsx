@@ -129,11 +129,28 @@ const AdaptiveLearning = () => {
       if (!response.ok) throw new Error("Erro ao obter questão");
 
       const data = await response.json();
-      console.log("✅ Questão recebida:", data);
-      console.log("📋 Question ID:", data.id);
-      console.log("📋 Concepts:", data.concepts);
+      console.log("✅ Questão ORIGINAL recebida da API:", JSON.stringify(data, null, 2));
+      console.log("📋 Campos disponíveis:", Object.keys(data));
       
-      setCurrentQuestion(data);
+      // Mapear a resposta da API para o formato esperado
+      const mappedQuestion: AdaptiveQuestion = {
+        id: data.id || data.question_id || `q_${Date.now()}`, // gerar ID se não existir
+        problem: data.problem || "",
+        equation: data.equation || "",
+        answer: data.answer || "",
+        steps: data.steps || data.solution_steps || [],
+        difficulty: data.difficulty || "medium",
+        type: data.type || "",
+        topic: data.topic || data.topic_id || "",
+        concepts: data.concepts || data.concepts_tested || [],
+        topic_id: data.topic_id || "",
+      };
+      
+      console.log("✅ Questão MAPEADA:", JSON.stringify(mappedQuestion, null, 2));
+      console.log("📋 ID final:", mappedQuestion.id);
+      console.log("📋 Concepts final:", mappedQuestion.concepts);
+      
+      setCurrentQuestion(mappedQuestion);
       setCurrentHint("");
       setHintLevel(0);
     } catch (error: any) {
