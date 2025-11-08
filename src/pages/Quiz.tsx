@@ -261,11 +261,8 @@ const Quiz = () => {
             {/* Hint System */}
             {!showFeedback && (
               <HintSystem
-                hints={[
-                  "Pense sobre o conceito fundamental envolvido nesta questão.",
-                  currentQuestion.explanation?.substring(0, 100) + "...",
-                  currentQuestion.explanation || "A resposta correta é: " + currentQuestion.correct_answer,
-                ]}
+                problem={currentQuestion.question_text}
+                workShown={workShown}
                 onHintUsed={(level) => setHintsUsed(level)}
               />
             )}

@@ -1,45 +1,78 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Lightbulb } from "lucide-react";
+import { Lightbulb, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface HintSystemProps {
-  hints: string[];
-  onHintUsed: (hintLevel: number) => void;
+  problem: string;
+  workShown: string;
+  onHintUsed?: (hintLevel: number) => void;
   className?: string;
 }
 
-export const HintSystem = ({ hints, onHintUsed, className }: HintSystemProps) => {
-  const [currentHintLevel, setCurrentHintLevel] = useState(0);
+export const HintSystem = ({ problem, workShown, onHintUsed, className }: HintSystemProps) => {
+  const [hints, setHints] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
 
-  const showNextHint = () => {
-    if (currentHintLevel < hints.length) {
-      setCurrentHintLevel(currentHintLevel + 1);
-      onHintUsed(currentHintLevel + 1);
+  const generateHint = async () => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-hint', {
+        body: { problem, workShown }
+      });
+
+      if (error) throw error;
+
+      if (data?.hint) {
+        setHints(prev => [...prev, data.hint]);
+        onHintUsed?.(hints.length + 1);
+      }
+    } catch (error: any) {
+      console.error('Error generating hint:', error);
+      toast({
+        title: "Erro ao gerar dica",
+        description: error.message || "Tente novamente em alguns instantes",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const getHintLabel = (level: number) => {
-    if (level === 1) return "Dica Leve";
-    if (level === 2) return "Dica Média";
+  const getHintLabel = (index: number) => {
+    if (index === 0) return "Dica Leve";
+    if (index === 1) return "Dica Média";
     return "Dica Completa";
   };
 
   return (
     <div className={cn("space-y-3", className)}>
-      {currentHintLevel === 0 ? (
+      {hints.length === 0 ? (
         <Button
           variant="outline"
-          onClick={showNextHint}
+          onClick={generateHint}
           className="w-full gap-2"
+          disabled={isLoading}
         >
-          <Lightbulb className="w-4 h-4" />
-          Preciso de uma dica
+          {isLoading ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Gerando dica...
+            </>
+          ) : (
+            <>
+              <Lightbulb className="w-4 h-4" />
+              Preciso de uma dica
+            </>
+          )}
         </Button>
       ) : (
         <div className="space-y-3">
-          {hints.slice(0, currentHintLevel).map((hint, index) => (
+          {hints.map((hint, index) => (
             <Card
               key={index}
               className={cn(
@@ -58,7 +91,7 @@ export const HintSystem = ({ hints, onHintUsed, className }: HintSystemProps) =>
                 )} />
                 <div className="space-y-1">
                   <p className="text-xs font-semibold text-muted-foreground">
-                    {getHintLabel(index + 1)}
+                    {getHintLabel(index)}
                   </p>
                   <p className="text-sm text-foreground">{hint}</p>
                 </div>
@@ -66,17 +99,25 @@ export const HintSystem = ({ hints, onHintUsed, className }: HintSystemProps) =>
             </Card>
           ))}
           
-          {currentHintLevel < hints.length && (
-            <Button
-              variant="outline"
-              onClick={showNextHint}
-              size="sm"
-              className="w-full gap-2"
-            >
-              <Lightbulb className="w-4 h-4" />
-              Ver próxima dica
-            </Button>
-          )}
+          <Button
+            variant="outline"
+            onClick={generateHint}
+            size="sm"
+            className="w-full gap-2"
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Gerando dica...
+              </>
+            ) : (
+              <>
+                <Lightbulb className="w-4 h-4" />
+                Ver próxima dica
+              </>
+            )}
+          </Button>
         </div>
       )}
     </div>
