@@ -201,6 +201,23 @@ const AdaptiveLearning = () => {
       return;
     }
 
+    // Validação crítica do question_id
+    if (!currentQuestion.id) {
+      console.error("❌ ERRO CRÍTICO: currentQuestion.id está undefined!");
+      console.error("🔍 currentQuestion completo:", currentQuestion);
+      toast({
+        title: "Erro",
+        description: "ID da questão não encontrado. Recarregando questão...",
+        variant: "destructive",
+      });
+      await getNextQuestion(studentId);
+      return;
+    }
+
+    console.log("🔍 Validação pré-submit:");
+    console.log("  - currentQuestion.id:", currentQuestion.id);
+    console.log("  - studentId:", studentId);
+
     setChecking(true);
     try {
       const submitBody = {
