@@ -37,7 +37,6 @@ const Subject = () => {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [progress, setProgress] = useState<Record<string, UserProgress>>({});
   const [diagnostics, setDiagnostics] = useState<Record<string, DiagnosticResult>>({});
-  const [diagnosticCompleted, setDiagnosticCompleted] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -46,16 +45,16 @@ const Subject = () => {
 
   const loadTopicsAndProgress = async () => {
     try {
-      // Load topics
       const { data: topicsData, error: topicsError } = await supabase
         .from("topics")
         .select("*")
-        .order("order_index");
+        .eq("subject", "Matemática")
+        .order("order_index", { ascending: true });
 
       if (topicsError) throw topicsError;
 
-      // Load user progress and diagnostics
       const { data: { user } } = await supabase.auth.getUser();
+      
       if (user) {
         // Load progress
         const { data: progressData, error: progressError } = await supabase
@@ -71,49 +70,6 @@ const Subject = () => {
         }, {} as Record<string, UserProgress>);
 
         setProgress(progressMap);
-
-        // Load diagnostic results from user_answers
-        console.log("🔍 Carregando diagnósticos...");
-        const { data: answersData, error: answersError } = await supabase
-          .from("user_answers")
-          .select("topic_id, is_correct, created_at")
-          .eq("user_id", user.id);
-
-        if (answersError) throw answersError;
-
-        console.log("📊 Respostas encontradas:", answersData?.length);
-
-        // Group answers by topic and calculate diagnostic results
-        const diagnosticsMap: Record<string, DiagnosticResult> = {};
-        
-        if (answersData) {
-          const answersByTopic = answersData.reduce((acc, answer) => {
-            if (!acc[answer.topic_id]) {
-              acc[answer.topic_id] = [];
-            }
-            acc[answer.topic_id].push(answer);
-            return acc;
-          }, {} as Record<string, typeof answersData>);
-
-          Object.entries(answersByTopic).forEach(([topicId, answers]) => {
-            const correctAnswers = answers.filter(a => a.is_correct).length;
-            const totalQuestions = answers.length;
-            const accuracy = totalQuestions > 0 
-              ? Math.round((correctAnswers / totalQuestions) * 100) 
-              : 0;
-
-            diagnosticsMap[topicId] = {
-              topic_id: topicId,
-              total_questions: totalQuestions,
-              correct_answers: correctAnswers,
-              accuracy_percentage: accuracy,
-              completed_at: answers[answers.length - 1]?.created_at || ""
-            };
-          });
-        }
-
-        console.log("✅ Diagnósticos processados:", diagnosticsMap);
-        setDiagnostics(diagnosticsMap);
       }
 
       setTopics(topicsData || []);
@@ -130,13 +86,7 @@ const Subject = () => {
   };
 
   const handleStartQuiz = (topicId: string) => {
-    const diagnosticResult = diagnostics[topicId];
-    // Se não tem diagnóstico geral, precisa fazer primeiro
-    if (!diagnosticResult || diagnosticResult.total_questions === 0) {
-      navigate(`/diagnostic`);
-    } else {
-      navigate(`/quiz/${topicId}`);
-    }
+    navigate(`/quiz/${topicId}`);
   };
 
   if (loading) {
@@ -165,7 +115,7 @@ const Subject = () => {
           </Button>
           <h1 className="text-3xl md:text-4xl font-bold mb-2">Matemática</h1>
           <p className="text-muted-foreground">
-            Cada tópico requer um teste diagnóstico antes de começar as questões. Acerte 5 questões consecutivas para dominar!
+            Escolha um tópico para gerar um simulado personalizado. Acerte 5 questões consecutivas para dominar!
           </p>
         </div>
 
@@ -173,7 +123,6 @@ const Subject = () => {
         <div className="space-y-4">
           {topics.map((topic) => {
             const topicProgress = progress[topic.id];
-            const diagnosticResult = diagnostics[topic.id];
             const masteryPercentage = topicProgress?.mastery_percentage || 0;
             const consecutiveCorrect = topicProgress?.consecutive_correct || 0;
 
@@ -192,22 +141,6 @@ const Subject = () => {
                           <CardDescription>{topic.description}</CardDescription>
                         </div>
                       </div>
-                      
-                      {/* Diagnostic Status - Show only if general diagnostic is complete */}
-                      {diagnosticCompleted && diagnosticResult && (
-                        <div className="mt-3 p-3 bg-primary/5 rounded-lg border border-primary/20">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-sm font-semibold text-primary">
-                              ✓ Diagnóstico Completo
-                            </span>
-                          </div>
-                          <div className="text-xs text-muted-foreground space-y-1">
-                            <div>
-                              Acertos: {diagnosticResult.correct_answers} de {diagnosticResult.total_questions} questões ({diagnosticResult.accuracy_percentage}%)
-                            </div>
-                          </div>
-                        </div>
-                      )}
 
                       <div className="flex items-center gap-3 mt-4">
                         <DifficultyBadge percentage={masteryPercentage} />
@@ -229,9 +162,7 @@ const Subject = () => {
                       size="lg"
                     >
                       <Play className="w-4 h-4" />
-                      {!diagnosticCompleted
-                        ? "Iniciar Diagnóstico" 
-                        : "Gerar Simulado (10 questões)"}
+                      Gerar Simulado (10 questões)
                     </Button>
                   </div>
                 </CardContent>
