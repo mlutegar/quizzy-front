@@ -10,6 +10,7 @@ import Home from "./pages/Home";
 import Auth from "./pages/Auth";
 import Subject from "./pages/Subject";
 import Quiz from "./pages/Quiz";
+import Diagnostic from "./pages/Diagnostic";
 import NotFound from "./pages/NotFound";
 import { AITeacherChat } from "./components/AITeacherChat";
 
@@ -48,6 +49,7 @@ const App = () => {
                 <Route path="/" element={<Home />} />
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/matematica" element={<Subject />} />
+                <Route path="/diagnostic" element={<Diagnostic />} />
                 <Route path="/quiz/:topicId" element={<Quiz addMessageToChat={addMessageToChat} setSessionId={setSessionId} />} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />

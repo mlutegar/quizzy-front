@@ -108,6 +108,34 @@ const Subject = () => {
           </p>
         </div>
 
+        {/* Diagnostic Test Card */}
+        <Card className="mb-6 border-primary bg-gradient-to-br from-primary/10 to-primary/5">
+          <CardHeader>
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <span className="text-3xl">🔍</span>
+                <div>
+                  <CardTitle className="text-xl">Teste Diagnóstico</CardTitle>
+                  <CardDescription>
+                    Avalie seu conhecimento para receber um caminho personalizado
+                  </CardDescription>
+                </div>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Button
+              onClick={() => navigate("/diagnostic")}
+              className="w-full gap-2"
+              size="lg"
+              variant="default"
+            >
+              <Play className="w-4 h-4" />
+              Começar Teste Diagnóstico
+            </Button>
+          </CardContent>
+        </Card>
+
         {/* Topics List */}
         <div className="space-y-4">
           {topics.map((topic) => {
