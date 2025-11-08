@@ -64,6 +64,35 @@ const AdaptiveLearning = () => {
       }
 
       console.log("👤 Usuário ID:", user.id);
+
+      // Check if user has completed diagnostic for this topic
+      console.log("🔍 Verificando diagnóstico no Supabase...");
+      const { data: diagnosticAnswers, error: diagnosticError } = await supabase
+        .from("user_answers")
+        .select("*, questions!inner(topic_id)")
+        .eq("user_id", user.id)
+        .eq("questions.topic_id", topicId!)
+        .limit(1);
+
+      console.log("📊 Respostas diagnóstico:", diagnosticAnswers);
+
+      let hasDiagnostic = false;
+      if (diagnosticAnswers && diagnosticAnswers.length > 0) {
+        hasDiagnostic = true;
+        console.log("✅ Usuário já fez diagnóstico para este tópico");
+        
+        // Get all diagnostic answers to send to Flask
+        const { data: allAnswers } = await supabase
+          .from("user_answers")
+          .select("*, questions!inner(topic_id, question_text, correct_answer)")
+          .eq("user_id", user.id)
+          .eq("questions.topic_id", topicId!);
+
+        console.log("📋 Total de respostas:", allAnswers?.length);
+      } else {
+        console.log("⚠️ Nenhum diagnóstico encontrado");
+      }
+      
       console.log("📡 Chamando API:", `${FLASK_API_URL}/adaptive/start`);
       
       const response = await fetch(`${FLASK_API_URL}/adaptive/start`, {
@@ -71,7 +100,9 @@ const AdaptiveLearning = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           student_id: user.id,
-          learning_path: "intermediate"
+          learning_path: "intermediate",
+          has_diagnostic: hasDiagnostic,
+          topic_id: topicId
         }),
       });
 
