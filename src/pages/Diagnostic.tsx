@@ -411,21 +411,32 @@ const Diagnostic = () => {
 
             {/* Actions */}
             {!showFeedback ? (
-              <Button
-                onClick={handleSubmitAnswer}
-                disabled={checking || !userAnswer}
-                className="w-full"
-                size="lg"
-              >
-                {checking ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Verificando...
-                  </>
-                ) : (
-                  "Verificar Resposta"
-                )}
-              </Button>
+              <div className="space-y-3">
+                <Button
+                  onClick={handleSubmitAnswer}
+                  disabled={checking || !userAnswer}
+                  className="w-full"
+                  size="lg"
+                >
+                  {checking ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Verificando...
+                    </>
+                  ) : (
+                    "Verificar Resposta"
+                  )}
+                </Button>
+                <Button
+                  onClick={handleNext}
+                  disabled={checking}
+                  variant="outline"
+                  className="w-full"
+                  size="lg"
+                >
+                  Pular Questão
+                </Button>
+              </div>
             ) : (
               <Button onClick={handleNext} className="w-full" size="lg">
                 Próxima Questão
