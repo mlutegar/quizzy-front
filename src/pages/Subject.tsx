@@ -23,11 +23,20 @@ interface UserProgress {
   total_attempts: number;
 }
 
+interface DiagnosticResult {
+  topic_id: string;
+  total_questions: number;
+  correct_answers: number;
+  accuracy_percentage: number;
+  completed_at: string;
+}
+
 const Subject = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [topics, setTopics] = useState<Topic[]>([]);
   const [progress, setProgress] = useState<Record<string, UserProgress>>({});
+  const [diagnostics, setDiagnostics] = useState<Record<string, DiagnosticResult>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -44,9 +53,10 @@ const Subject = () => {
 
       if (topicsError) throw topicsError;
 
-      // Load user progress
+      // Load user progress and diagnostics
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
+        // Load progress
         const { data: progressData, error: progressError } = await supabase
           .from("user_progress")
           .select("*")
@@ -60,10 +70,54 @@ const Subject = () => {
         }, {} as Record<string, UserProgress>);
 
         setProgress(progressMap);
+
+        // Load diagnostic results from user_answers
+        console.log("🔍 Carregando diagnósticos...");
+        const { data: answersData, error: answersError } = await supabase
+          .from("user_answers")
+          .select("topic_id, is_correct, created_at")
+          .eq("user_id", user.id);
+
+        if (answersError) throw answersError;
+
+        console.log("📊 Respostas encontradas:", answersData?.length);
+
+        // Group answers by topic and calculate diagnostic results
+        const diagnosticsMap: Record<string, DiagnosticResult> = {};
+        
+        if (answersData) {
+          const answersByTopic = answersData.reduce((acc, answer) => {
+            if (!acc[answer.topic_id]) {
+              acc[answer.topic_id] = [];
+            }
+            acc[answer.topic_id].push(answer);
+            return acc;
+          }, {} as Record<string, typeof answersData>);
+
+          Object.entries(answersByTopic).forEach(([topicId, answers]) => {
+            const correctAnswers = answers.filter(a => a.is_correct).length;
+            const totalQuestions = answers.length;
+            const accuracy = totalQuestions > 0 
+              ? Math.round((correctAnswers / totalQuestions) * 100) 
+              : 0;
+
+            diagnosticsMap[topicId] = {
+              topic_id: topicId,
+              total_questions: totalQuestions,
+              correct_answers: correctAnswers,
+              accuracy_percentage: accuracy,
+              completed_at: answers[answers.length - 1]?.created_at || ""
+            };
+          });
+        }
+
+        console.log("✅ Diagnósticos processados:", diagnosticsMap);
+        setDiagnostics(diagnosticsMap);
       }
 
       setTopics(topicsData || []);
     } catch (error: any) {
+      console.error("❌ Erro:", error);
       toast({
         title: "Erro ao carregar tópicos",
         description: error.message,
@@ -75,9 +129,9 @@ const Subject = () => {
   };
 
   const handleStartQuiz = (topicId: string) => {
-    const topicProgress = progress[topicId];
-    // Se não tem progresso, precisa fazer diagnóstico primeiro
-    if (!topicProgress || topicProgress.total_attempts === 0) {
+    const diagnosticResult = diagnostics[topicId];
+    // Se não tem diagnóstico, precisa fazer primeiro
+    if (!diagnosticResult || diagnosticResult.total_questions === 0) {
       navigate(`/diagnostic/${topicId}`);
     } else {
       navigate(`/quiz/${topicId}`);
@@ -118,8 +172,10 @@ const Subject = () => {
         <div className="space-y-4">
           {topics.map((topic) => {
             const topicProgress = progress[topic.id];
+            const diagnosticResult = diagnostics[topic.id];
             const masteryPercentage = topicProgress?.mastery_percentage || 0;
             const consecutiveCorrect = topicProgress?.consecutive_correct || 0;
+            const hasDiagnostic = diagnosticResult && diagnosticResult.total_questions > 0;
 
             return (
               <Card
@@ -136,6 +192,23 @@ const Subject = () => {
                           <CardDescription>{topic.description}</CardDescription>
                         </div>
                       </div>
+                      
+                      {/* Diagnostic Status */}
+                      {hasDiagnostic && (
+                        <div className="mt-3 p-3 bg-primary/5 rounded-lg border border-primary/20">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-sm font-semibold text-primary">
+                              ✓ Diagnóstico Completo
+                            </span>
+                          </div>
+                          <div className="text-xs text-muted-foreground space-y-1">
+                            <div>
+                              Acertos: {diagnosticResult.correct_answers} de {diagnosticResult.total_questions} questões ({diagnosticResult.accuracy_percentage}%)
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                       <div className="flex items-center gap-3 mt-4">
                         <DifficultyBadge percentage={masteryPercentage} />
                         {consecutiveCorrect > 0 && (
@@ -156,7 +229,7 @@ const Subject = () => {
                       size="lg"
                     >
                       <Play className="w-4 h-4" />
-                      {(!topicProgress || topicProgress.total_attempts === 0) 
+                      {!hasDiagnostic
                         ? "Iniciar Diagnóstico" 
                         : "Gerar Simulado (5 questões)"}
                     </Button>
