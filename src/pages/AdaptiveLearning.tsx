@@ -191,7 +191,7 @@ const AdaptiveLearning = () => {
       const hintBody = {
         question_id: currentQuestion.id,
         question: currentQuestion.problem,
-        hint_level: hintLevel, // Mudado de current_hint_level
+        hint_level: 1, // Sempre nível 1
       };
 
       console.log("📡 POST para:", `${FLASK_API_URL}/adaptive/${studentId}/hint`);
@@ -213,11 +213,10 @@ const AdaptiveLearning = () => {
       console.log("✅ Dica recebida:", data);
 
       setCurrentHint(data.hint);
-      setHintLevel(data.hint_level);
 
       toast({
         title: data.encouragement || "💡 Dica",
-        description: `Nível ${data.hint_level + 1} de dica`,
+        description: "Confira a dica abaixo da questão",
       });
     } catch (error: any) {
       toast({
