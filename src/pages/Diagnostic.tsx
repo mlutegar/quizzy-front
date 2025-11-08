@@ -258,6 +258,44 @@ const Diagnostic = () => {
     }
   };
 
+  const handleSkipQuestion = async () => {
+    if (!currentQuestion) return;
+
+    setChecking(true);
+    try {
+      // Submit empty answer to API so it knows we're skipping
+      await fetch(`${FLASK_API_URL}/diagnostic/${studentId}/submit`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          question_id: currentQuestion.question_id,
+          answer: "", // Empty answer = skipped
+        }),
+      });
+
+      // Update answers array to show skipped (null)
+      const newAnswers = [...answers];
+      newAnswers[questionNumber - 1] = null;
+      setAnswers(newAnswers);
+
+      // Load next question
+      setUserAnswer("");
+      setShowFeedback(false);
+      setSolutionSteps([]);
+      await loadNextQuestion();
+    } catch (error: any) {
+      toast({
+        title: "Erro ao pular questão",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setChecking(false);
+    }
+  };
+
   const handleNext = async () => {
     setUserAnswer("");
     setShowFeedback(false);
@@ -428,7 +466,7 @@ const Diagnostic = () => {
                   )}
                 </Button>
                 <Button
-                  onClick={handleNext}
+                  onClick={handleSkipQuestion}
                   disabled={checking}
                   variant="outline"
                   className="w-full"
