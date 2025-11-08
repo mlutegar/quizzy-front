@@ -187,56 +187,54 @@ const AdaptiveLearning = () => {
     if (!currentQuestion || !studentId) return;
 
     // Validar dados antes de enviar
-    if (!currentQuestion.id || !currentQuestion.problem) {
+    if (!currentQuestion.problem) {
       toast({
         title: "Erro",
-        description: "Dados da questão incompletos",
+        description: "Enunciado da questão não encontrado",
         variant: "destructive",
       });
-      console.error("❌ Questão incompleta:", currentQuestion);
       return;
     }
 
     setLoadingHint(true);
     try {
-      const hintBody = {
-        question_id: currentQuestion.id,
-        question: currentQuestion.problem,
-        hint_level: 1, // Sempre nível 1
+      const startBody = {
+        problem: currentQuestion.problem,
       };
 
-      console.log("📡 POST para:", `${FLASK_API_URL}/adaptive/${studentId}/hint`);
-      console.log("📤 POST BODY:", JSON.stringify(hintBody, null, 2));
-      console.log("🔍 Tipo de question_id:", typeof currentQuestion.id);
-      console.log("🔍 Tipo de question:", typeof currentQuestion.problem);
+      console.log("📡 POST para:", `${FLASK_API_URL}/start`);
+      console.log("📤 POST BODY:", JSON.stringify(startBody, null, 2));
 
-      const response = await fetch(`${FLASK_API_URL}/adaptive/${studentId}/hint`, {
+      const response = await fetch(`${FLASK_API_URL}/start`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(hintBody),
+        headers: { 
+          "Accept": "application/json",
+          "Content-Type": "application/json" 
+        },
+        body: JSON.stringify(startBody),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
-        console.error("❌ Erro ao obter dica:", errorData);
-        console.error("❌ Status:", response.status);
-        throw new Error(errorData?.error || `Erro ${response.status} ao obter dica`);
+        console.error("❌ Erro ao iniciar sessão de ajuda:", errorData);
+        throw new Error(errorData?.error || `Erro ${response.status} ao obter ajuda`);
       }
 
-      const data: HintResponse = await response.json();
-      console.log("✅ Dica recebida:", data);
+      const data = await response.json();
+      console.log("✅ Sessão de ajuda iniciada:", data);
 
-      setCurrentHint(data.hint);
+      // Adicionar a resposta do professor ao chat
+      setCurrentHint(data.question || data.message || "Vou te ajudar com essa questão!");
 
       toast({
-        title: data.encouragement || "💡 Dica",
-        description: "Confira a dica abaixo da questão",
+        title: "💡 Professor IA",
+        description: "Confira a orientação abaixo da questão",
       });
     } catch (error: any) {
-      console.error("💥 Erro completo:", error);
+      console.error("💥 Erro ao pedir ajuda:", error);
       toast({
-        title: "Erro ao obter dica",
-        description: error.message || "Erro desconhecido no servidor",
+        title: "Erro ao pedir ajuda",
+        description: error.message || "Erro ao conectar com o Professor IA",
         variant: "destructive",
       });
     } finally {
