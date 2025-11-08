@@ -191,7 +191,7 @@ const AdaptiveLearning = () => {
       const hintBody = {
         question_id: currentQuestion.id,
         question: currentQuestion.problem,
-        current_hint_level: hintLevel,
+        hint_level: hintLevel, // Mudado de current_hint_level
       };
 
       console.log("📡 POST para:", `${FLASK_API_URL}/adaptive/${studentId}/hint`);
@@ -203,7 +203,11 @@ const AdaptiveLearning = () => {
         body: JSON.stringify(hintBody),
       });
 
-      if (!response.ok) throw new Error("Erro ao obter dica");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        console.error("❌ Erro ao obter dica:", errorData);
+        throw new Error(errorData?.error || "Erro ao obter dica");
+      }
 
       const data: HintResponse = await response.json();
       console.log("✅ Dica recebida:", data);
