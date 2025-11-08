@@ -12,6 +12,7 @@ import Subject from "./pages/Subject";
 import Quiz from "./pages/Quiz";
 import Diagnostic from "./pages/Diagnostic";
 import AdaptiveLearning from "./pages/AdaptiveLearning";
+import CustomQuestion from "./pages/CustomQuestion";
 import NotFound from "./pages/NotFound";
 import { AITeacherChat } from "./components/AITeacherChat";
 
@@ -52,6 +53,7 @@ const App = () => {
                 <Route path="/matematica" element={<Subject />} />
                 <Route path="/diagnostic" element={<Diagnostic />} />
                 <Route path="/adaptive/:topicId" element={<AdaptiveLearning />} />
+                <Route path="/custom-question" element={<CustomQuestion />} />
                 <Route path="/quiz/:topicId" element={<Quiz addMessageToChat={addMessageToChat} setSessionId={setSessionId} />} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />

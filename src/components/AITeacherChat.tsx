@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card } from "@/components/ui/card";
-import { X, Send, MessageSquare, Loader2 } from "lucide-react";
+import { X, Send, MessageSquare, Loader2, Paperclip } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 
 interface Message {
   role: "user" | "assistant";
@@ -22,6 +24,10 @@ interface AITeacherChatProps {
 const FLASK_API_URL = "http://localhost:5000";
 
 export const AITeacherChat = ({ isOpen, onClose, onMessagesChange, initialMessages, sessionId }: AITeacherChatProps) => {
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   const [messages, setMessages] = useState<Message[]>(
     initialMessages || [
       {
@@ -32,6 +38,7 @@ export const AITeacherChat = ({ isOpen, onClose, onMessagesChange, initialMessag
   );
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Sync external messages
@@ -101,6 +108,90 @@ export const AITeacherChat = ({ isOpen, onClose, onMessagesChange, initialMessag
     }
   };
 
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validar tipo de arquivo
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: "Formato inválido",
+        description: "Por favor, envie apenas imagens.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setUploadingImage(true);
+    
+    try {
+      // Criar FormData para enviar a imagem
+      const formData = new FormData();
+      formData.append('image', file);
+
+      console.log("📤 Enviando imagem para OCR...");
+      
+      // Fazer requisição para o OCR
+      const response = await fetch(`${FLASK_API_URL}/ocr/extract`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Erro no OCR: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log("✅ Texto extraído:", data);
+
+      // Adicionar mensagem informando que a imagem foi processada
+      setMessages((prev) => [
+        ...prev,
+        { role: "user", content: "📎 [Enviou uma foto de questão]" },
+        { 
+          role: "assistant", 
+          content: `Vi que você enviou uma foto! Extraí o seguinte texto:\n\n"${data.text}"\n\nVou te levar para uma página onde você pode resolver essa questão. Clique em continuar.` 
+        }
+      ]);
+
+      toast({
+        title: "Foto processada!",
+        description: "Navegando para a questão customizada...",
+      });
+
+      // Navegar para a página de questão customizada após um delay
+      setTimeout(() => {
+        navigate("/custom-question", {
+          state: {
+            questionText: data.text,
+            sessionId: sessionId,
+          }
+        });
+      }, 1500);
+
+    } catch (error) {
+      console.error("Erro ao processar imagem:", error);
+      toast({
+        title: "Erro ao processar imagem",
+        description: "Não foi possível extrair o texto da imagem. Tente novamente.",
+        variant: "destructive",
+      });
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "Desculpe, não consegui processar a imagem. Pode tentar enviar novamente?",
+        },
+      ]);
+    } finally {
+      setUploadingImage(false);
+      // Limpar o input de arquivo
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -158,14 +249,35 @@ export const AITeacherChat = ({ isOpen, onClose, onMessagesChange, initialMessag
           }}
           className="flex gap-2"
         >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleImageUpload}
+            className="hidden"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isLoading || uploadingImage}
+            title="Enviar foto de questão"
+          >
+            {uploadingImage ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Paperclip className="w-4 h-4" />
+            )}
+          </Button>
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Digite sua pergunta..."
-            disabled={isLoading}
+            disabled={isLoading || uploadingImage}
             className="flex-1"
           />
-          <Button type="submit" disabled={isLoading || !input.trim()} size="icon">
+          <Button type="submit" disabled={isLoading || uploadingImage || !input.trim()} size="icon">
             <Send className="w-4 h-4" />
           </Button>
         </form>
