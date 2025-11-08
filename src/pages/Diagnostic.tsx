@@ -218,6 +218,17 @@ const Diagnostic = () => {
     setChecking(true);
 
     try {
+      // Get authenticated user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast({
+          title: "Erro",
+          description: "Você precisa estar logado",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const response = await fetch(`${FLASK_API_URL}/diagnostic/${studentId}/submit`, {
         method: "POST",
         headers: {
@@ -241,6 +252,23 @@ const Diagnostic = () => {
       newAnswers[questionNumber - 1] = data.is_correct || false;
       setAnswers(newAnswers);
 
+      // Save answer to Supabase
+      const { error: saveError } = await supabase
+        .from("user_answers")
+        .insert({
+          user_id: user.id,
+          question_id: currentQuestion.question_id,
+          topic_id: topicId!,
+          user_answer: userAnswer,
+          is_correct: data.is_correct || false,
+          work_shown: "",
+          hints_used: 0,
+        });
+
+      if (saveError) {
+        console.error("Erro ao salvar resposta no Supabase:", saveError);
+      }
+
       setShowFeedback(true);
 
       // If test is completed, generate questions
@@ -263,6 +291,17 @@ const Diagnostic = () => {
 
     setChecking(true);
     try {
+      // Get authenticated user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast({
+          title: "Erro",
+          description: "Você precisa estar logado",
+          variant: "destructive",
+        });
+        return;
+      }
+
       // Submit empty answer to API so it knows we're skipping
       await fetch(`${FLASK_API_URL}/diagnostic/${studentId}/submit`, {
         method: "POST",
@@ -274,6 +313,19 @@ const Diagnostic = () => {
           answer: "", // Empty answer = skipped
         }),
       });
+
+      // Save skipped answer to Supabase as incorrect
+      await supabase
+        .from("user_answers")
+        .insert({
+          user_id: user.id,
+          question_id: currentQuestion.question_id,
+          topic_id: topicId!,
+          user_answer: "",
+          is_correct: false,
+          work_shown: "",
+          hints_used: 0,
+        });
 
       // Update answers array to show skipped (null)
       const newAnswers = [...answers];
