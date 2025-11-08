@@ -297,7 +297,7 @@ const AdaptiveLearning = () => {
           </Card>
 
           {/* Difficulty Badge */}
-          {currentQuestion.adaptive_context && (
+          {currentQuestion?.adaptive_context && (
             <div className="flex items-center gap-2 mb-4">
               <span className="text-xs font-semibold px-3 py-1 rounded-full bg-muted">
                 Dificuldade: {currentQuestion.adaptive_context.current_difficulty}
