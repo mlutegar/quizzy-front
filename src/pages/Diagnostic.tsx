@@ -95,6 +95,58 @@ const Diagnostic = () => {
     }
   };
 
+  const generateQuestionsForTopic = async () => {
+    try {
+      toast({
+        title: "🎉 Teste Diagnóstico Completo!",
+        description: "Gerando questões personalizadas...",
+      });
+
+      // Get student progress to determine difficulty
+      const progressResponse = await fetch(`${FLASK_API_URL}/progress/${studentId}`);
+      if (!progressResponse.ok) throw new Error("Erro ao buscar progresso");
+      
+      const progressData = await progressResponse.json();
+      
+      // Determine difficulty based on learning path or accuracy
+      let difficulty = "medium";
+      if (progressData.learning_path === "beginner") {
+        difficulty = "easy";
+      } else if (progressData.learning_path === "advanced") {
+        difficulty = "hard";
+      }
+
+      // Generate questions
+      const generateResponse = await fetch(`${FLASK_API_URL}/questions/generate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          count: 10,
+          difficulty: difficulty,
+        }),
+      });
+
+      if (!generateResponse.ok) throw new Error("Erro ao gerar questões");
+
+      toast({
+        title: "Questões Geradas!",
+        description: "Redirecionando para o quiz...",
+      });
+
+      setTimeout(() => navigate(`/quiz/${topicId}`), 1500);
+    } catch (error: any) {
+      toast({
+        title: "Erro ao gerar questões",
+        description: error.message,
+        variant: "destructive",
+      });
+      // Navigate anyway
+      setTimeout(() => navigate(`/quiz/${topicId}`), 2000);
+    }
+  };
+
   const loadNextQuestion = async () => {
     try {
       const response = await fetch(`${FLASK_API_URL}/diagnostic/${studentId}/next`);
@@ -104,12 +156,7 @@ const Diagnostic = () => {
       const data: DiagnosticResponse = await response.json();
 
       if (data.status === "test_completed") {
-        toast({
-          title: "Teste Diagnóstico Completo!",
-          description: "Redirecionando para as questões...",
-        });
-        // Redireciona para o quiz do tópico após completar diagnóstico
-        navigate(`/quiz/${topicId}`);
+        await generateQuestionsForTopic();
         return;
       }
 
@@ -171,13 +218,9 @@ const Diagnostic = () => {
 
       setShowFeedback(true);
 
-      // If test is completed, navigate to quiz
+      // If test is completed, generate questions
       if (data.status === "test_completed") {
-        toast({
-          title: "🎉 Teste Diagnóstico Completo!",
-          description: data.diagnostic_results?.message || "Teste finalizado com sucesso!",
-        });
-        setTimeout(() => navigate(`/quiz/${topicId}`), 2000);
+        await generateQuestionsForTopic();
       }
     } catch (error: any) {
       toast({
