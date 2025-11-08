@@ -50,7 +50,7 @@ const App = () => {
                 <Route path="/" element={<Home />} />
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/matematica" element={<Subject />} />
-                <Route path="/diagnostic/:topicId" element={<Diagnostic />} />
+                <Route path="/diagnostic" element={<Diagnostic />} />
                 <Route path="/adaptive/:topicId" element={<AdaptiveLearning />} />
                 <Route path="/quiz/:topicId" element={<Quiz addMessageToChat={addMessageToChat} setSessionId={setSessionId} />} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

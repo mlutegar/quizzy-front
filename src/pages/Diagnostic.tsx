@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { QuestionIndicators } from "@/components/QuestionIndicators";
 import { ArrowLeft, CheckCircle, XCircle, Loader2 } from "lucide-react";
@@ -18,12 +17,12 @@ interface DiagnosticQuestion {
   problem: string;
   equation: string;
   difficulty: string;
+  type: string;
+  topic: string;
   topic_id: string;
   topic_name: string;
   concepts: string[];
   is_diagnostic: boolean;
-  options?: string[];
-  question_type?: "multiple_choice" | "open";
 }
 
 interface DiagnosticResponse {
@@ -40,13 +39,33 @@ interface DiagnosticResponse {
   message?: string;
 }
 
+interface DiagnosticResults {
+  overall_accuracy: number;
+  total_questions: number;
+  total_correct: number;
+  topic_performance: Record<string, any>;
+  mastered_topics: string[];
+  recommended_path: {
+    path_name: string;
+    path_title: string;
+    description: string;
+    reason: string;
+    path_topics: string[];
+    start_topic: string;
+  };
+  next_topics: Array<{
+    topic_id: string;
+    name: string;
+    description: string;
+  }>;
+  message: string;
+}
+
 const Diagnostic = () => {
-  const { topicId } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const studentId = "student_123"; // TODO: Get from auth context
-  const [topicName, setTopicName] = useState("");
   
+  const [studentId, setStudentId] = useState<string>("");
   const [currentQuestion, setCurrentQuestion] = useState<DiagnosticQuestion | null>(null);
   const [questionNumber, setQuestionNumber] = useState(0);
   const [totalQuestions, setTotalQuestions] = useState(15);
@@ -57,21 +76,62 @@ const Diagnostic = () => {
   const [showFeedback, setShowFeedback] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
   const [solutionSteps, setSolutionSteps] = useState<string[]>([]);
+  const [diagnosticResults, setDiagnosticResults] = useState<DiagnosticResults | null>(null);
 
   useEffect(() => {
-    startDiagnosticTest();
+    initializeDiagnostic();
   }, []);
 
-  const startDiagnosticTest = async () => {
-    if (!topicId) {
-      navigate(-1);
-      return;
-    }
+  const initializeDiagnostic = async () => {
+    try {
+      // Get authenticated user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast({
+          title: "Erro",
+          description: "Você precisa estar logado",
+          variant: "destructive",
+        });
+        navigate("/auth");
+        return;
+      }
 
+      const userId = user.id;
+      setStudentId(userId);
+
+      // Check diagnostic status
+      console.log("📡 GET para:", `${FLASK_API_URL}/diagnostic/${userId}/status`);
+      const statusResponse = await fetch(`${FLASK_API_URL}/diagnostic/${userId}/status`);
+      const statusData = await statusResponse.json();
+
+      console.log("✅ Status:", statusData);
+
+      if (statusData.diagnostic_completed) {
+        toast({
+          title: "Diagnóstico já completo",
+          description: "Você já completou o teste diagnóstico!",
+        });
+        navigate("/matematica");
+        return;
+      }
+
+      // Start diagnostic test
+      await startDiagnosticTest(userId);
+    } catch (error: any) {
+      console.error("Erro ao inicializar diagnóstico:", error);
+      toast({
+        title: "Erro ao iniciar diagnóstico",
+        description: error.message,
+        variant: "destructive",
+      });
+      navigate("/matematica");
+    }
+  };
+
+  const startDiagnosticTest = async (userId: string) => {
     try {
       const startBody = {
-        student_id: studentId,
-        topic_id: topicId,
+        student_id: userId,
         questions_per_topic: 3,
       };
 
@@ -88,110 +148,38 @@ const Diagnostic = () => {
 
       if (!response.ok) throw new Error("Erro ao iniciar teste diagnóstico");
 
-      await loadNextQuestion();
-    } catch (error: any) {
+      const data = await response.json();
+      console.log("✅ Teste iniciado:", data);
+
       toast({
-        title: "Erro ao iniciar teste",
-        description: error.message,
-        variant: "destructive",
+        title: "Teste Diagnóstico Iniciado",
+        description: `${data.total_questions} questões sobre ${data.topics_covered} tópicos`,
       });
-      navigate(-1);
+
+      await loadNextQuestion(userId);
+    } catch (error: any) {
+      throw error;
     } finally {
       setLoading(false);
     }
   };
 
-  const generateQuestionsForTopic = async () => {
+  const loadNextQuestion = async (userId: string) => {
     try {
-      toast({
-        title: "🎉 Teste Diagnóstico Completo!",
-        description: "Gerando questões personalizadas...",
-      });
-
-      // Get student progress to determine difficulty
-      const progressResponse = await fetch(`${FLASK_API_URL}/progress/${studentId}`);
-      if (!progressResponse.ok) throw new Error("Erro ao buscar progresso");
-      
-      const progressData = await progressResponse.json();
-      
-      // Determine difficulty based on learning path or accuracy
-      let difficulty = "medium";
-      if (progressData.learning_path === "beginner") {
-        difficulty = "easy";
-      } else if (progressData.learning_path === "advanced") {
-        difficulty = "hard";
-      }
-
-      // Generate questions
-      const generateBody = {
-        count: 10,
-        difficulty: difficulty,
-      };
-
-      console.log("📡 POST para:", `${FLASK_API_URL}/questions/generate`);
-      console.log("📤 POST BODY:", JSON.stringify(generateBody, null, 2));
-
-      const generateResponse = await fetch(`${FLASK_API_URL}/questions/generate`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(generateBody),
-      });
-
-      if (!generateResponse.ok) throw new Error("Erro ao gerar questões");
-
-      const questionsData = await generateResponse.json();
-
-      // Save questions to Supabase so Quiz page can load them
-      if (questionsData.questions && questionsData.questions.length > 0) {
-        const questionsToSave = questionsData.questions.map((q: any) => ({
-          topic_id: topicId,
-          question_text: q.problem,
-          question_type: "open" as const,
-          options: null,
-          correct_answer: String(q.answer),
-          explanation: q.steps?.join("\n") || "",
-          prerequisites: [],
-        }));
-
-        const { error: insertError } = await supabase
-          .from("questions")
-          .insert(questionsToSave);
-
-        if (insertError) {
-          console.error("Erro ao salvar questões:", insertError);
-          throw new Error("Erro ao salvar questões");
-        }
-      }
-
-      toast({
-        title: "Questões Geradas!",
-        description: "Redirecionando para o quiz...",
-      });
-
-      setTimeout(() => navigate(`/quiz/${topicId}`), 1500);
-    } catch (error: any) {
-      toast({
-        title: "Erro ao gerar questões",
-        description: error.message,
-        variant: "destructive",
-      });
-      // Navigate anyway
-      setTimeout(() => navigate(`/quiz/${topicId}`), 2000);
-    }
-  };
-
-  const loadNextQuestion = async () => {
-    try {
-      const response = await fetch(`${FLASK_API_URL}/diagnostic/${studentId}/next`);
+      console.log("📡 GET para:", `${FLASK_API_URL}/diagnostic/${userId}/next`);
+      const response = await fetch(`${FLASK_API_URL}/diagnostic/${userId}/next`);
       
       if (!response.ok) throw new Error("Erro ao carregar questão");
 
       const data: DiagnosticResponse = await response.json();
+      console.log("✅ Próxima questão:", data);
 
       if (data.status === "test_completed") {
-        await generateQuestionsForTopic();
+        toast({
+          title: "🎉 Teste Completo!",
+          description: "Avaliando seus resultados...",
+        });
+        // O resultado virá no submit da última questão
         return;
       }
 
@@ -199,7 +187,6 @@ const Diagnostic = () => {
         setCurrentQuestion(data.question);
         setQuestionNumber(data.question_number || 1);
         setTotalQuestions(data.total_questions || 15);
-        setTopicName(data.question.topic_name || "");
         
         // Initialize answers array if needed
         if (answers.length === 0) {
@@ -207,6 +194,7 @@ const Diagnostic = () => {
         }
       }
     } catch (error: any) {
+      console.error("Erro ao carregar questão:", error);
       toast({
         title: "Erro ao carregar questão",
         description: error.message,
@@ -216,7 +204,7 @@ const Diagnostic = () => {
   };
 
   const handleSubmitAnswer = async () => {
-    if (!userAnswer.trim() || !currentQuestion) {
+    if (!userAnswer.trim() || !currentQuestion || !studentId) {
       toast({
         title: "Resposta vazia",
         description: "Por favor, responda à questão antes de verificar.",
@@ -228,17 +216,6 @@ const Diagnostic = () => {
     setChecking(true);
 
     try {
-      // Get authenticated user
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast({
-          title: "Erro",
-          description: "Você precisa estar logado",
-          variant: "destructive",
-        });
-        return;
-      }
-
       const submitBody = {
         question_id: currentQuestion.question_id,
         answer: userAnswer,
@@ -258,6 +235,7 @@ const Diagnostic = () => {
       if (!response.ok) throw new Error("Erro ao submeter resposta");
 
       const data: DiagnosticResponse = await response.json();
+      console.log("✅ Resposta submetida:", data);
 
       setIsCorrect(data.is_correct || false);
       setSolutionSteps(data.solution_steps || []);
@@ -267,30 +245,14 @@ const Diagnostic = () => {
       newAnswers[questionNumber - 1] = data.is_correct || false;
       setAnswers(newAnswers);
 
-      // Save answer to Supabase
-      const { error: saveError } = await supabase
-        .from("user_answers")
-        .insert({
-          user_id: user.id,
-          question_id: currentQuestion.question_id,
-          topic_id: topicId!,
-          user_answer: userAnswer,
-          is_correct: data.is_correct || false,
-          work_shown: "",
-          hints_used: 0,
-        });
-
-      if (saveError) {
-        console.error("Erro ao salvar resposta no Supabase:", saveError);
-      }
-
       setShowFeedback(true);
 
-      // If test is completed, generate questions
-      if (data.status === "test_completed") {
-        await generateQuestionsForTopic();
+      // Check if test is completed
+      if (data.status === "test_completed" && data.diagnostic_results) {
+        setDiagnosticResults(data.diagnostic_results);
       }
     } catch (error: any) {
+      console.error("Erro ao verificar resposta:", error);
       toast({
         title: "Erro ao verificar resposta",
         description: error.message,
@@ -301,78 +263,24 @@ const Diagnostic = () => {
     }
   };
 
-  const handleSkipQuestion = async () => {
-    if (!currentQuestion) return;
-
-    setChecking(true);
-    try {
-      // Get authenticated user
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast({
-          title: "Erro",
-          description: "Você precisa estar logado",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Submit empty answer to API so it knows we're skipping
-      const skipBody = {
-        question_id: currentQuestion.question_id,
-        answer: "", // Empty answer = skipped
-      };
-
-      console.log("📡 POST para (skip):", `${FLASK_API_URL}/diagnostic/${studentId}/submit`);
-      console.log("📤 POST BODY:", JSON.stringify(skipBody, null, 2));
-
-      await fetch(`${FLASK_API_URL}/diagnostic/${studentId}/submit`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(skipBody),
-      });
-
-      // Save skipped answer to Supabase as incorrect
-      await supabase
-        .from("user_answers")
-        .insert({
-          user_id: user.id,
-          question_id: currentQuestion.question_id,
-          topic_id: topicId!,
-          user_answer: "",
-          is_correct: false,
-          work_shown: "",
-          hints_used: 0,
-        });
-
-      // Update answers array to show skipped (null)
-      const newAnswers = [...answers];
-      newAnswers[questionNumber - 1] = null;
-      setAnswers(newAnswers);
-
-      // Load next question
-      setUserAnswer("");
-      setShowFeedback(false);
-      setSolutionSteps([]);
-      await loadNextQuestion();
-    } catch (error: any) {
-      toast({
-        title: "Erro ao pular questão",
-        description: error.message,
-        variant: "destructive",
-      });
-    } finally {
-      setChecking(false);
-    }
-  };
-
   const handleNext = async () => {
+    if (diagnosticResults) {
+      // Show results screen
+      return;
+    }
+
     setUserAnswer("");
     setShowFeedback(false);
     setSolutionSteps([]);
-    await loadNextQuestion();
+    await loadNextQuestion(studentId);
+  };
+
+  const handleFinishDiagnostic = () => {
+    toast({
+      title: "Diagnóstico Completo!",
+      description: "Redirecionando para seus tópicos personalizados...",
+    });
+    navigate("/matematica");
   };
 
   if (loading) {
@@ -381,6 +289,126 @@ const Diagnostic = () => {
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
           <p className="text-muted-foreground">Preparando teste diagnóstico...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show diagnostic results
+  if (diagnosticResults) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-success/10">
+        <div className="container mx-auto px-4 py-8 max-w-4xl">
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="text-2xl">🎉 Teste Diagnóstico Completo!</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Overall Performance */}
+              <div className="bg-primary/5 rounded-lg p-6">
+                <h3 className="text-lg font-semibold mb-4">Desempenho Geral</h3>
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <div>
+                    <div className="text-3xl font-bold text-primary">
+                      {Math.round(diagnosticResults.overall_accuracy * 100)}%
+                    </div>
+                    <div className="text-sm text-muted-foreground">Acurácia</div>
+                  </div>
+                  <div>
+                    <div className="text-3xl font-bold text-success">
+                      {diagnosticResults.total_correct}
+                    </div>
+                    <div className="text-sm text-muted-foreground">Acertos</div>
+                  </div>
+                  <div>
+                    <div className="text-3xl font-bold text-muted-foreground">
+                      {diagnosticResults.total_questions}
+                    </div>
+                    <div className="text-sm text-muted-foreground">Total</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Recommended Path */}
+              <div className="bg-card rounded-lg p-6 border-2 border-primary">
+                <h3 className="text-lg font-semibold mb-2">📚 Seu Caminho de Aprendizado</h3>
+                <h4 className="text-xl font-bold text-primary mb-2">
+                  {diagnosticResults.recommended_path.path_title}
+                </h4>
+                <p className="text-muted-foreground mb-2">
+                  {diagnosticResults.recommended_path.description}
+                </p>
+                <p className="text-sm italic">
+                  Motivo: {diagnosticResults.recommended_path.reason}
+                </p>
+              </div>
+
+              {/* Mastered Topics */}
+              {diagnosticResults.mastered_topics.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-3">✅ Tópicos Dominados</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {diagnosticResults.mastered_topics.map((topicId) => (
+                      <span
+                        key={topicId}
+                        className="px-3 py-1 bg-success/10 text-success rounded-full text-sm font-medium"
+                      >
+                        {diagnosticResults.topic_performance[topicId]?.name || topicId}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Next Topics */}
+              {diagnosticResults.next_topics && diagnosticResults.next_topics.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold mb-3">🎯 Próximos Tópicos</h3>
+                  <div className="space-y-2">
+                    {diagnosticResults.next_topics.map((topic) => (
+                      <Card key={topic.topic_id}>
+                        <CardContent className="py-3">
+                          <h4 className="font-semibold">{topic.name}</h4>
+                          <p className="text-sm text-muted-foreground">{topic.description}</p>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Topic Performance */}
+              <div>
+                <h3 className="text-lg font-semibold mb-3">📊 Desempenho por Tópico</h3>
+                <div className="space-y-2">
+                  {Object.entries(diagnosticResults.topic_performance).map(([topicId, perf]: [string, any]) => (
+                    <div key={topicId} className="flex items-center justify-between p-3 bg-card rounded-lg">
+                      <div className="flex-1">
+                        <div className="font-medium">{perf.name}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {perf.questions_answered} questões
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <div className="text-lg font-bold">
+                            {Math.round(perf.accuracy * 100)}%
+                          </div>
+                        </div>
+                        {perf.is_mastered && (
+                          <CheckCircle className="w-6 h-6 text-success" />
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <Button onClick={handleFinishDiagnostic} className="w-full" size="lg">
+                Começar Aprendizado Personalizado
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       </div>
     );
@@ -408,10 +436,10 @@ const Diagnostic = () => {
                 <div className="text-3xl">🔍</div>
                 <div>
                   <h2 className="text-lg font-semibold">
-                    Sessão de Diagnóstico {topicName && `- ${topicName}`}
+                    Teste Diagnóstico
                   </h2>
                   <p className="text-sm text-muted-foreground">
-                    Este teste avalia seu conhecimento neste tópico para personalizar seu aprendizado
+                    Avaliando seu conhecimento para personalizar seu aprendizado
                   </p>
                 </div>
               </div>
@@ -457,33 +485,15 @@ const Diagnostic = () => {
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Answer Input */}
-            {currentQuestion.question_type === "multiple_choice" && currentQuestion.options ? (
-              <RadioGroup value={userAnswer} onValueChange={setUserAnswer}>
-                <div className="space-y-3">
-                  {currentQuestion.options.map((option, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center space-x-3 p-3 rounded-lg border hover:bg-accent transition-colors"
-                    >
-                      <RadioGroupItem value={option} id={`option-${index}`} />
-                      <Label htmlFor={`option-${index}`} className="flex-1 cursor-pointer">
-                        {option}
-                      </Label>
-                    </div>
-                  ))}
-                </div>
-              </RadioGroup>
-            ) : (
-              <div className="space-y-2">
-                <Label>Sua resposta</Label>
-                <Input
-                  value={userAnswer}
-                  onChange={(e) => setUserAnswer(e.target.value)}
-                  placeholder="Digite sua resposta..."
-                  disabled={showFeedback}
-                />
-              </div>
-            )}
+            <div className="space-y-2">
+              <Label>Sua resposta</Label>
+              <Input
+                value={userAnswer}
+                onChange={(e) => setUserAnswer(e.target.value)}
+                placeholder="Digite sua resposta..."
+                disabled={showFeedback}
+              />
+            </div>
 
             {/* Feedback */}
             {showFeedback && (
@@ -503,7 +513,7 @@ const Diagnostic = () => {
                         {isCorrect ? "Resposta Correta! ✅" : "Resposta Incorreta ❌"}
                       </h3>
                       
-                      {!isCorrect && solutionSteps.length > 0 && (
+                      {solutionSteps.length > 0 && (
                         <div className="space-y-2 mt-3">
                           <p className="text-sm font-semibold">Solução:</p>
                           <div className="text-sm space-y-1 font-mono bg-background/50 p-3 rounded">
@@ -521,35 +531,24 @@ const Diagnostic = () => {
 
             {/* Actions */}
             {!showFeedback ? (
-              <div className="space-y-3">
-                <Button
-                  onClick={handleSubmitAnswer}
-                  disabled={checking || !userAnswer}
-                  className="w-full"
-                  size="lg"
-                >
-                  {checking ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Verificando...
-                    </>
-                  ) : (
-                    "Verificar Resposta"
-                  )}
-                </Button>
-                <Button
-                  onClick={handleSkipQuestion}
-                  disabled={checking}
-                  variant="outline"
-                  className="w-full"
-                  size="lg"
-                >
-                  Pular Questão
-                </Button>
-              </div>
+              <Button
+                onClick={handleSubmitAnswer}
+                disabled={checking || !userAnswer}
+                className="w-full"
+                size="lg"
+              >
+                {checking ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Verificando...
+                  </>
+                ) : (
+                  "Verificar Resposta"
+                )}
+              </Button>
             ) : (
               <Button onClick={handleNext} className="w-full" size="lg">
-                Próxima Questão
+                {diagnosticResults ? "Ver Resultados" : "Próxima Questão"}
               </Button>
             )}
           </CardContent>

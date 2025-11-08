@@ -130,9 +130,9 @@ const Subject = () => {
 
   const handleStartQuiz = (topicId: string) => {
     const diagnosticResult = diagnostics[topicId];
-    // Se não tem diagnóstico, precisa fazer primeiro
+    // Se não tem diagnóstico geral, precisa fazer primeiro
     if (!diagnosticResult || diagnosticResult.total_questions === 0) {
-      navigate(`/diagnostic/${topicId}`);
+      navigate(`/diagnostic`);
     } else {
       navigate(`/quiz/${topicId}`);
     }
