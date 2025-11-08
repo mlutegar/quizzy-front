@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { ArrowLeft, CheckCircle, XCircle, Loader2, Lightbulb } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,18 +21,20 @@ interface AdaptiveQuestion {
   topic: string;
   concepts: string[];
   topic_id: string;
-  adaptive_context?: {
-    current_difficulty: string;
-    mastered_topics: string[];
-    session_question_number: number;
-  };
+}
+
+interface HintResponse {
+  hint: string;
+  hint_level: number;
+  hint_type: string;
+  encouragement: string;
 }
 
 const AdaptiveLearning = () => {
-  const { topicId } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
   
+  const [studentId, setStudentId] = useState<string>("");
   const [currentQuestion, setCurrentQuestion] = useState<AdaptiveQuestion | null>(null);
   const [userAnswer, setUserAnswer] = useState("");
   const [loading, setLoading] = useState(true);
@@ -43,6 +45,9 @@ const AdaptiveLearning = () => {
   const [sessionComplete, setSessionComplete] = useState(false);
   const [questionsAnswered, setQuestionsAnswered] = useState(0);
   const [topicName, setTopicName] = useState("");
+  const [currentHint, setCurrentHint] = useState("");
+  const [hintLevel, setHintLevel] = useState(0);
+  const [loadingHint, setLoadingHint] = useState(false);
 
   useEffect(() => {
     startAdaptiveSession();
@@ -50,57 +55,25 @@ const AdaptiveLearning = () => {
 
   const startAdaptiveSession = async () => {
     try {
-      console.log("🚀 Iniciando sessão adaptativa...");
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        console.error("❌ Usuário não autenticado");
         toast({
           title: "Erro",
           description: "Você precisa estar logado",
           variant: "destructive",
         });
-        navigate(-1);
+        navigate("/auth");
         return;
       }
 
-      console.log("👤 Usuário ID:", user.id);
+      setStudentId(user.id);
 
-      // Check if user has completed diagnostic for this topic
-      console.log("🔍 Verificando diagnóstico no Supabase...");
-      const { data: diagnosticAnswers, error: diagnosticError } = await supabase
-        .from("user_answers")
-        .select("*, questions!inner(topic_id)")
-        .eq("user_id", user.id)
-        .eq("questions.topic_id", topicId!)
-        .limit(1);
-
-      console.log("📊 Respostas diagnóstico:", diagnosticAnswers);
-
-      let hasDiagnostic = false;
-      if (diagnosticAnswers && diagnosticAnswers.length > 0) {
-        hasDiagnostic = true;
-        console.log("✅ Usuário já fez diagnóstico para este tópico");
-        
-        // Get all diagnostic answers to send to Flask
-        const { data: allAnswers } = await supabase
-          .from("user_answers")
-          .select("*, questions!inner(topic_id, question_text, correct_answer)")
-          .eq("user_id", user.id)
-          .eq("questions.topic_id", topicId!);
-
-        console.log("📋 Total de respostas:", allAnswers?.length);
-      } else {
-        console.log("⚠️ Nenhum diagnóstico encontrado");
-      }
-      
       const startBody = {
         student_id: user.id,
-        learning_path: "intermediate",
-        has_diagnostic: hasDiagnostic,
-        topic_id: topicId
+        learning_path: "intermediate", // Could be dynamic based on diagnostic results
       };
       
-      console.log("📡 Chamando API:", `${FLASK_API_URL}/adaptive/start`);
+      console.log("📡 POST para:", `${FLASK_API_URL}/adaptive/start`);
       console.log("📤 POST BODY:", JSON.stringify(startBody, null, 2));
       
       const response = await fetch(`${FLASK_API_URL}/adaptive/start`, {
@@ -108,17 +81,23 @@ const AdaptiveLearning = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(startBody),
       });
-
-      console.log("📨 Resposta status:", response.status);
       
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error("❌ Erro na resposta:", errorText);
+        const data = await response.json();
+        if (data.status === "diagnostic_required") {
+          toast({
+            title: "Diagnóstico Necessário",
+            description: data.message || "Complete o teste diagnóstico primeiro",
+            variant: "destructive",
+          });
+          navigate("/diagnostic");
+          return;
+        }
         throw new Error("Erro ao iniciar sessão adaptativa");
       }
 
       const data = await response.json();
-      console.log("📦 Dados recebidos:", data);
+      console.log("✅ Sessão iniciada:", data);
       
       if (data.status === "ready") {
         setTopicName(data.topic_name || "Aprendizagem Adaptativa");
@@ -127,20 +106,6 @@ const AdaptiveLearning = () => {
           description: `Vamos trabalhar: ${data.topic_name}`,
         });
         await getNextQuestion(user.id);
-      } else if (data.status === "diagnostic_required") {
-        console.log("⚠️ Diagnóstico necessário");
-        toast({
-          title: "Diagnóstico Necessário",
-          description: data.message || "Complete o teste diagnóstico primeiro",
-          variant: "destructive",
-        });
-        navigate("/diagnostic");
-      } else if (data.status === "completed") {
-        toast({
-          title: "Parabéns!",
-          description: data.message,
-        });
-        navigate(`/quiz/${topicId}`);
       }
     } catch (error: any) {
       toast({
@@ -157,56 +122,74 @@ const AdaptiveLearning = () => {
   const getNextQuestion = async (userId: string) => {
     setLoading(true);
     try {
-      console.log("🔍 Buscando próxima questão para:", userId);
-      console.log("📡 URL:", `${FLASK_API_URL}/adaptive/${userId}/next`);
+      console.log("📡 GET para:", `${FLASK_API_URL}/adaptive/${userId}/next`);
       
       const response = await fetch(`${FLASK_API_URL}/adaptive/${userId}/next`);
-      console.log("📨 Status resposta:", response.status);
       
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("❌ Erro na resposta:", errorText);
-        throw new Error("Erro ao obter questão");
-      }
+      if (!response.ok) throw new Error("Erro ao obter questão");
 
       const data = await response.json();
-      console.log("📦 Questão recebida:", data);
+      console.log("✅ Questão recebida:", data);
       setCurrentQuestion(data);
-      
-      // Save question to Supabase for later practice
-      if (topicId) {
-        const { error } = await supabase
-          .from("questions")
-          .upsert({
-            id: data.id,
-            topic_id: topicId,
-            question_text: data.problem,
-            question_type: "open",
-            options: null,
-            correct_answer: String(data.answer),
-            explanation: data.steps?.join("\n") || "",
-            prerequisites: data.concepts || [],
-          }, {
-            onConflict: "id"
-          });
-
-        if (error) console.error("Erro ao salvar questão:", error);
-      }
+      setCurrentHint("");
+      setHintLevel(0);
     } catch (error: any) {
-      console.error("💥 Erro ao buscar questão:", error);
+      console.error("Erro ao buscar questão:", error);
       toast({
         title: "Erro",
         description: error.message,
         variant: "destructive",
       });
     } finally {
-      console.log("✅ Finalizando carregamento");
       setLoading(false);
     }
   };
 
+  const requestHint = async () => {
+    if (!currentQuestion || !studentId) return;
+
+    setLoadingHint(true);
+    try {
+      const hintBody = {
+        question_id: currentQuestion.id,
+        question: currentQuestion.problem,
+        current_hint_level: hintLevel,
+      };
+
+      console.log("📡 POST para:", `${FLASK_API_URL}/adaptive/${studentId}/hint`);
+      console.log("📤 POST BODY:", JSON.stringify(hintBody, null, 2));
+
+      const response = await fetch(`${FLASK_API_URL}/adaptive/${studentId}/hint`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(hintBody),
+      });
+
+      if (!response.ok) throw new Error("Erro ao obter dica");
+
+      const data: HintResponse = await response.json();
+      console.log("✅ Dica recebida:", data);
+
+      setCurrentHint(data.hint);
+      setHintLevel(data.hint_level);
+
+      toast({
+        title: data.encouragement || "💡 Dica",
+        description: `Nível ${data.hint_level + 1} de dica`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao obter dica",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingHint(false);
+    }
+  };
+
   const submitAnswer = async () => {
-    if (!userAnswer.trim() || !currentQuestion) {
+    if (!userAnswer.trim() || !currentQuestion || !studentId) {
       toast({
         title: "Resposta vazia",
         description: "Por favor, responda à questão antes de verificar.",
@@ -217,9 +200,6 @@ const AdaptiveLearning = () => {
 
     setChecking(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
       const submitBody = {
         question_id: currentQuestion.id,
         question: currentQuestion.problem,
@@ -229,10 +209,10 @@ const AdaptiveLearning = () => {
         concepts_tested: currentQuestion.concepts,
       };
 
-      console.log("📡 POST para:", `${FLASK_API_URL}/adaptive/${user.id}/submit`);
+      console.log("📡 POST para:", `${FLASK_API_URL}/adaptive/${studentId}/submit`);
       console.log("📤 POST BODY:", JSON.stringify(submitBody, null, 2));
 
-      const response = await fetch(`${FLASK_API_URL}/adaptive/${user.id}/submit`, {
+      const response = await fetch(`${FLASK_API_URL}/adaptive/${studentId}/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(submitBody),
@@ -241,6 +221,8 @@ const AdaptiveLearning = () => {
       if (!response.ok) throw new Error("Erro ao submeter resposta");
 
       const data = await response.json();
+      console.log("✅ Resposta submetida:", data);
+
       setIsCorrect(data.is_correct);
       setShowFeedback(true);
       setQuestionsAnswered(prev => prev + 1);
@@ -249,23 +231,18 @@ const AdaptiveLearning = () => {
         setErrorAnalysis(data.error_analysis.explanation || "");
       }
 
-      // Save answer to database
-      await supabase.from("user_answers").insert({
-        user_id: user.id,
-        question_id: currentQuestion.id,
-        topic_id: topicId!,
-        user_answer: userAnswer,
-        is_correct: data.is_correct,
-        work_shown: "",
-        hints_used: 0,
-      });
+      if (data.hint && !data.is_correct) {
+        setCurrentHint(data.hint);
+      }
 
       if (data.status === "topic_mastered") {
         toast({
           title: "🎉 Tópico Dominado!",
           description: data.message,
         });
-        setSessionComplete(true);
+        setTimeout(() => {
+          setSessionComplete(true);
+        }, 2000);
       } else if (data.status === "prerequisite_required") {
         toast({
           title: "Pré-requisito necessário",
@@ -289,13 +266,12 @@ const AdaptiveLearning = () => {
   };
 
   const handleNext = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
     setShowFeedback(false);
     setUserAnswer("");
     setErrorAnalysis("");
-    await getNextQuestion(user.id);
+    setCurrentHint("");
+    setHintLevel(0);
+    await getNextQuestion(studentId);
   };
 
   const handleFinish = () => {
@@ -303,7 +279,7 @@ const AdaptiveLearning = () => {
       title: "Sessão Finalizada",
       description: `Você respondeu ${questionsAnswered} questões adaptativas.`,
     });
-    navigate(`/quiz/${topicId}`);
+    navigate("/matematica");
   };
 
   if (loading) {
@@ -324,11 +300,14 @@ const AdaptiveLearning = () => {
           <CardContent className="pt-6 text-center">
             <div className="text-6xl mb-4">🎉</div>
             <h2 className="text-2xl font-bold mb-2">Parabéns!</h2>
-            <p className="text-muted-foreground mb-6">
+            <p className="text-muted-foreground mb-2">
               Você completou a sessão de aprendizagem adaptativa com sucesso!
             </p>
+            <p className="text-sm text-muted-foreground mb-6">
+              Total de questões: {questionsAnswered}
+            </p>
             <Button onClick={handleFinish} className="w-full" size="lg">
-              Voltar para Questões
+              Voltar para Tópicos
             </Button>
           </CardContent>
         </Card>
@@ -377,18 +356,6 @@ const AdaptiveLearning = () => {
               </div>
             </CardContent>
           </Card>
-
-          {/* Difficulty Badge */}
-          {currentQuestion?.adaptive_context && (
-            <div className="flex items-center gap-2 mb-4">
-              <span className="text-xs font-semibold px-3 py-1 rounded-full bg-muted">
-                Dificuldade: {currentQuestion.adaptive_context.current_difficulty}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                Questão #{currentQuestion.adaptive_context.session_question_number}
-              </span>
-            </div>
-          )}
         </div>
 
         {/* Question Card */}
@@ -399,7 +366,7 @@ const AdaptiveLearning = () => {
                 {currentQuestion.topic}
               </span>
               <span className="text-xs font-semibold px-2 py-1 rounded-full bg-muted">
-                {currentQuestion.type}
+                {currentQuestion.difficulty}
               </span>
             </div>
             <CardTitle className="text-xl leading-relaxed">
@@ -422,6 +389,25 @@ const AdaptiveLearning = () => {
                 }}
               />
             </div>
+
+            {/* Progressive Hint */}
+            {!showFeedback && currentHint && (
+              <Card className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+                <CardContent className="pt-4">
+                  <div className="flex items-start gap-3">
+                    <Lightbulb className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-1">
+                        💡 Dica Nível {hintLevel + 1}
+                      </p>
+                      <p className="text-sm text-blue-800 dark:text-blue-200">
+                        {currentHint}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Feedback */}
             {showFeedback && (
@@ -460,6 +446,13 @@ const AdaptiveLearning = () => {
                           <p className="text-sm whitespace-pre-wrap">{errorAnalysis}</p>
                         </div>
                       )}
+
+                      {!isCorrect && currentHint && (
+                        <div className="space-y-2 mt-4 pt-4 border-t">
+                          <p className="text-sm font-semibold">💡 Dica para próxima vez:</p>
+                          <p className="text-sm whitespace-pre-wrap">{currentHint}</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </CardContent>
@@ -468,21 +461,43 @@ const AdaptiveLearning = () => {
 
             {/* Actions */}
             {!showFeedback ? (
-              <Button
-                onClick={submitAnswer}
-                disabled={checking || !userAnswer}
-                className="w-full"
-                size="lg"
-              >
-                {checking ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Verificando...
-                  </>
-                ) : (
-                  "Verificar Resposta"
-                )}
-              </Button>
+              <div className="space-y-3">
+                <Button
+                  onClick={submitAnswer}
+                  disabled={checking || !userAnswer}
+                  className="w-full"
+                  size="lg"
+                >
+                  {checking ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Verificando...
+                    </>
+                  ) : (
+                    "Verificar Resposta"
+                  )}
+                </Button>
+                
+                <Button
+                  onClick={requestHint}
+                  disabled={loadingHint || checking}
+                  variant="outline"
+                  className="w-full"
+                  size="lg"
+                >
+                  {loadingHint ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Gerando dica...
+                    </>
+                  ) : (
+                    <>
+                      <Lightbulb className="w-4 h-4 mr-2" />
+                      {currentHint ? `Próxima Dica (${hintLevel + 2}/3)` : "Pedir Dica"}
+                    </>
+                  )}
+                </Button>
+              </div>
             ) : (
               <div className="space-y-3">
                 <Button onClick={handleNext} className="w-full" size="lg">
