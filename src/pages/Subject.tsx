@@ -7,6 +7,7 @@ import { DifficultyBadge } from "@/components/DifficultyBadge";
 import { supabase } from "@/integrations/supabase/client";
 import { ArrowLeft, Play } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 interface Topic {
   id: string;
@@ -37,6 +38,8 @@ const Subject = () => {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [progress, setProgress] = useState<Record<string, UserProgress>>({});
   const [diagnostics, setDiagnostics] = useState<Record<string, DiagnosticResult>>({});
+  const [diagnosticCompleted, setDiagnosticCompleted] = useState(false);
+  const [checkingDiagnostic, setCheckingDiagnostic] = useState(true);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -56,6 +59,22 @@ const Subject = () => {
       const { data: { user } } = await supabase.auth.getUser();
       
       if (user) {
+        // Check diagnostic status from Flask API
+        const FLASK_API_URL = "http://localhost:5000";
+        try {
+          setCheckingDiagnostic(true);
+          const diagnosticResponse = await fetch(`${FLASK_API_URL}/diagnostic/${user.id}/status`);
+          if (diagnosticResponse.ok) {
+            const diagnosticData = await diagnosticResponse.json();
+            console.log("📊 Status do diagnóstico:", diagnosticData);
+            setDiagnosticCompleted(diagnosticData.diagnostic_completed || false);
+          }
+        } catch (error) {
+          console.error("Erro ao verificar diagnóstico:", error);
+        } finally {
+          setCheckingDiagnostic(false);
+        }
+
         // Load progress
         const { data: progressData, error: progressError } = await supabase
           .from("user_progress")
@@ -86,7 +105,19 @@ const Subject = () => {
   };
 
   const handleStartQuiz = (topicId: string) => {
+    if (!diagnosticCompleted) {
+      toast({
+        title: "Diagnóstico Necessário",
+        description: "Complete o teste diagnóstico primeiro para acessar os tópicos.",
+        variant: "destructive",
+      });
+      return;
+    }
     navigate(`/quiz/${topicId}`);
+  };
+
+  const handleStartDiagnostic = () => {
+    navigate("/diagnostic");
   };
 
   if (loading) {
@@ -115,61 +146,106 @@ const Subject = () => {
           </Button>
           <h1 className="text-3xl md:text-4xl font-bold mb-2">Matemática</h1>
           <p className="text-muted-foreground">
-            Escolha um tópico para gerar um simulado personalizado. Acerte 5 questões consecutivas para dominar!
+            {diagnosticCompleted 
+              ? "Escolha um tópico para gerar um simulado personalizado. Acerte 5 questões consecutivas para dominar!"
+              : "Complete o teste diagnóstico para personalizar sua experiência de aprendizado."}
           </p>
         </div>
 
-        {/* Topics List */}
-        <div className="space-y-4">
-          {topics.map((topic) => {
-            const topicProgress = progress[topic.id];
-            const masteryPercentage = topicProgress?.mastery_percentage || 0;
-            const consecutiveCorrect = topicProgress?.consecutive_correct || 0;
+        {/* Diagnostic Required Banner */}
+        {!checkingDiagnostic && !diagnosticCompleted && (
+          <Card className="mb-8 border-2 border-primary bg-gradient-to-br from-primary/10 to-primary/5">
+            <CardContent className="pt-6">
+              <div className="flex flex-col md:flex-row items-center gap-6">
+                <div className="text-6xl">🔍</div>
+                <div className="flex-1 text-center md:text-left">
+                  <h2 className="text-2xl font-bold mb-2">Teste Diagnóstico</h2>
+                  <p className="text-muted-foreground mb-4">
+                    Antes de começar, precisamos avaliar seu nível de conhecimento para 
+                    personalizar as questões de acordo com suas necessidades. O teste leva 
+                    cerca de 10-15 minutos e cobre os fundamentos de matemática.
+                  </p>
+                  <div className="flex flex-wrap gap-2 text-sm text-muted-foreground mb-4">
+                    <span className="flex items-center gap-1">
+                      ✓ 15 questões
+                    </span>
+                    <span className="flex items-center gap-1">
+                      ✓ 5 tópicos diferentes
+                    </span>
+                    <span className="flex items-center gap-1">
+                      ✓ Personalização do aprendizado
+                    </span>
+                  </div>
+                  <Button 
+                    onClick={handleStartDiagnostic} 
+                    size="lg"
+                    className="w-full md:w-auto"
+                  >
+                    Iniciar Teste Diagnóstico
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-            return (
-              <Card
-                key={topic.id}
-                className="hover:shadow-lg transition-all duration-300"
-              >
-                <CardHeader>
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <span className="text-3xl">{topic.icon}</span>
-                        <div className="flex-1">
-                          <CardTitle className="text-xl">{topic.name}</CardTitle>
-                          <CardDescription>{topic.description}</CardDescription>
+        {/* Topics List */}
+        {!checkingDiagnostic && (
+          <div className={cn(
+            "space-y-4",
+            !diagnosticCompleted && "opacity-50 pointer-events-none"
+          )}>
+            {topics.map((topic) => {
+              const topicProgress = progress[topic.id];
+              const masteryPercentage = topicProgress?.mastery_percentage || 0;
+              const consecutiveCorrect = topicProgress?.consecutive_correct || 0;
+
+              return (
+                <Card
+                  key={topic.id}
+                  className="hover:shadow-lg transition-all duration-300"
+                >
+                  <CardHeader>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <span className="text-3xl">{topic.icon}</span>
+                          <div className="flex-1">
+                            <CardTitle className="text-xl">{topic.name}</CardTitle>
+                            <CardDescription>{topic.description}</CardDescription>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 mt-4">
+                          <DifficultyBadge percentage={masteryPercentage} />
+                          {consecutiveCorrect > 0 && (
+                            <span className="text-sm text-muted-foreground">
+                              🔥 {consecutiveCorrect} acerto(s) seguido(s)
+                            </span>
+                          )}
                         </div>
                       </div>
-
-                      <div className="flex items-center gap-3 mt-4">
-                        <DifficultyBadge percentage={masteryPercentage} />
-                        {consecutiveCorrect > 0 && (
-                          <span className="text-sm text-muted-foreground">
-                            🔥 {consecutiveCorrect} acerto(s) seguido(s)
-                          </span>
-                        )}
-                      </div>
                     </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <ProgressBar value={masteryPercentage} />
-                    <Button
-                      onClick={() => handleStartQuiz(topic.id)}
-                      className="w-full gap-2"
-                      size="lg"
-                    >
-                      <Play className="w-4 h-4" />
-                      Gerar Simulado (10 questões)
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <ProgressBar value={masteryPercentage} />
+                      <Button
+                        onClick={() => handleStartQuiz(topic.id)}
+                        className="w-full gap-2"
+                        size="lg"
+                        disabled={!diagnosticCompleted}
+                      >
+                        <Play className="w-4 h-4" />
+                        Gerar Simulado (10 questões)
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
