@@ -182,41 +182,8 @@ const Quiz = ({ addMessageToChat, setSessionId }: QuizProps) => {
 
   const FLASK_API_URL = "http://localhost:5000";
 
-  const startAdaptiveSession = async () => {
-    setAdaptiveLoading(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const response = await fetch(`${FLASK_API_URL}/adaptive/start`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          student_id: user.id,
-          learning_path: "intermediate"
-        }),
-      });
-
-      if (!response.ok) throw new Error("Erro ao iniciar sessão adaptativa");
-
-      const data = await response.json();
-      
-      if (data.status === "ready") {
-        toast({
-          title: "Sessão Adaptativa Iniciada",
-          description: `Vamos trabalhar: ${data.topic_name}`,
-        });
-        await getAdaptiveQuestion();
-      }
-    } catch (error: any) {
-      toast({
-        title: "Erro",
-        description: error.message,
-        variant: "destructive",
-      });
-    } finally {
-      setAdaptiveLoading(false);
-    }
+  const startAdaptiveSession = () => {
+    navigate(`/adaptive/${topicId}`);
   };
 
   const getAdaptiveQuestion = async () => {
