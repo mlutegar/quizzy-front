@@ -89,7 +89,7 @@ const Auth = () => {
               <GraduationCap className="w-8 h-8 text-white" />
             </div>
           </div>
-          <CardTitle className="text-2xl font-bold">MathMaster AI</CardTitle>
+          <CardTitle className="text-2xl font-bold">Quizzy</CardTitle>
           <CardDescription>
             Seu professor particular de matemática com inteligência artificial
           </CardDescription>

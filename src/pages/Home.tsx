@@ -3,8 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
-import { GraduationCap, BookOpen, LogOut } from "lucide-react";
+import { BookOpen, LogOut } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import quizzyLogo from "@/assets/quizzy-logo.png";
 
 const Home = () => {
   const navigate = useNavigate();
@@ -49,11 +50,9 @@ const Home = () => {
         {/* Header */}
         <div className="flex items-center justify-between mb-12">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-primary rounded-lg">
-              <GraduationCap className="w-8 h-8 text-white" />
-            </div>
+            <img src={quizzyLogo} alt="Quizzy" className="w-10 h-10" />
             <div>
-              <h1 className="text-2xl font-bold text-foreground">MathMaster AI</h1>
+              <h1 className="text-2xl font-bold text-foreground">Quizzy</h1>
               <p className="text-sm text-muted-foreground">Olá, {user?.user_metadata?.full_name || "Estudante"}!</p>
             </div>
           </div>
