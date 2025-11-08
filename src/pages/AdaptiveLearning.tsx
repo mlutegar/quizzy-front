@@ -98,6 +98,8 @@ const AdaptiveLearning = () => {
 
       const data = await response.json();
       console.log("✅ Sessão iniciada:", data);
+      console.log("📋 Student ID usado:", user.id);
+      console.log("📋 Status da sessão:", data.status);
       
       if (data.status === "ready") {
         setTopicName(data.topic_name || "Aprendizagem Adaptativa");
@@ -106,6 +108,8 @@ const AdaptiveLearning = () => {
           description: `Vamos trabalhar: ${data.topic_name}`,
         });
         await getNextQuestion(user.id);
+      } else {
+        throw new Error(`Status inesperado: ${data.status}`);
       }
     } catch (error: any) {
       toast({
@@ -126,7 +130,21 @@ const AdaptiveLearning = () => {
       
       const response = await fetch(`${FLASK_API_URL}/adaptive/${userId}/next`);
       
-      if (!response.ok) throw new Error("Erro ao obter questão");
+      if (!response.ok) {
+        if (response.status === 404) {
+          const errorData = await response.json().catch(() => null);
+          console.error("❌ Sessão não encontrada ao buscar questão:", errorData);
+          toast({
+            title: "Sessão Perdida",
+            description: "Reiniciando sessão adaptativa...",
+            variant: "destructive",
+          });
+          // Reiniciar sessão
+          await startAdaptiveSession();
+          return;
+        }
+        throw new Error("Erro ao obter questão");
+      }
 
       const data = await response.json();
       console.log("✅ Questão ORIGINAL recebida da API:", JSON.stringify(data, null, 2));
@@ -256,9 +274,23 @@ const AdaptiveLearning = () => {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error("❌ Erro na resposta:", errorText);
-        throw new Error(`Erro ao submeter resposta: ${response.status}`);
+        const errorData = await response.json().catch(() => null);
+        console.error("❌ Erro na resposta:", errorData);
+        
+        // Sessão não encontrada - reiniciar
+        if (response.status === 404 && errorData?.error?.includes("session not found")) {
+          toast({
+            title: "Sessão Expirada",
+            description: "Reiniciando sua sessão adaptativa...",
+            variant: "destructive",
+          });
+          
+          // Reiniciar sessão
+          await startAdaptiveSession();
+          return;
+        }
+        
+        throw new Error(errorData?.error || `Erro ao submeter resposta: ${response.status}`);
       }
 
       const data = await response.json();
