@@ -63,30 +63,79 @@ const Quiz = ({ addMessageToChat, setSessionId }: QuizProps) => {
 
   const loadQuestions = async () => {
     try {
-      const { data, error } = await supabase
-        .from("questions")
-        .select("*")
-        .eq("topic_id", topicId)
-        .limit(5);
+      // Get topic name from Supabase
+      const { data: topicData, error: topicError } = await supabase
+        .from("topics")
+        .select("name")
+        .eq("id", topicId)
+        .single();
 
-      if (error) throw error;
-      if (!data || data.length === 0) {
+      if (topicError) throw topicError;
+      if (!topicData) {
         toast({
-          title: "Nenhuma questão disponível",
-          description: "Este tópico ainda não possui questões cadastradas.",
+          title: "Tópico não encontrado",
+          description: "Não foi possível encontrar o tópico.",
           variant: "destructive",
         });
         navigate(-1);
         return;
       }
 
-      setQuestions(data as Question[]);
+      // Generate questions from Flask API
+      const requestBody = {
+        count: 10,
+        difficulty: "medium",
+        topic: topicData.name
+      };
+
+      console.log("📡 POST para:", `${FLASK_API_URL}/questions/generate`);
+      console.log("📤 POST BODY:", JSON.stringify(requestBody, null, 2));
+
+      const response = await fetch(`${FLASK_API_URL}/questions/generate`, {
+        method: "POST",
+        headers: {
+          "accept": "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Erro ao gerar questões: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      if (!data.questions || data.questions.length === 0) {
+        toast({
+          title: "Nenhuma questão gerada",
+          description: "Não foi possível gerar questões para este tópico.",
+          variant: "destructive",
+        });
+        navigate(-1);
+        return;
+      }
+
+      // Map Flask API response to Question format
+      const mappedQuestions: Question[] = data.questions.slice(0, 5).map((q: any) => ({
+        id: q.id,
+        question_text: q.problem,
+        question_type: "open" as const,
+        options: null,
+        correct_answer: String(q.answer),
+        explanation: q.steps ? q.steps.join("\n") : "",
+        prerequisites: [],
+      }));
+
+      setQuestions(mappedQuestions);
     } catch (error: any) {
+      console.error("Erro ao gerar questões:", error);
       toast({
-        title: "Erro ao carregar questões",
+        title: "Erro ao gerar questões",
         description: error.message,
         variant: "destructive",
       });
+      navigate(-1);
     } finally {
       setLoading(false);
     }
