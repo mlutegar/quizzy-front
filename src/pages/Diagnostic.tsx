@@ -9,6 +9,7 @@ import { QuestionIndicators } from "@/components/QuestionIndicators";
 import { ArrowLeft, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
 
 const FLASK_API_URL = "http://localhost:5000";
 
@@ -129,6 +130,30 @@ const Diagnostic = () => {
       });
 
       if (!generateResponse.ok) throw new Error("Erro ao gerar questões");
+
+      const questionsData = await generateResponse.json();
+
+      // Save questions to Supabase so Quiz page can load them
+      if (questionsData.questions && questionsData.questions.length > 0) {
+        const questionsToSave = questionsData.questions.map((q: any) => ({
+          topic_id: topicId,
+          question_text: q.problem,
+          question_type: "open" as const,
+          options: null,
+          correct_answer: String(q.answer),
+          explanation: q.steps?.join("\n") || "",
+          prerequisites: [],
+        }));
+
+        const { error: insertError } = await supabase
+          .from("questions")
+          .insert(questionsToSave);
+
+        if (insertError) {
+          console.error("Erro ao salvar questões:", insertError);
+          throw new Error("Erro ao salvar questões");
+        }
+      }
 
       toast({
         title: "Questões Geradas!",
