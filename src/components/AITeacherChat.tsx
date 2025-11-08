@@ -14,24 +14,36 @@ interface Message {
 interface AITeacherChatProps {
   isOpen: boolean;
   onClose: () => void;
+  onMessagesChange?: (messages: Message[]) => void;
+  initialMessages?: Message[];
 }
 
-export const AITeacherChat = ({ isOpen, onClose }: AITeacherChatProps) => {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "assistant",
-      content: "Olá! Sou seu professor particular de IA. Pode me perguntar qualquer coisa sobre matemática ou tirar dúvidas sobre os exercícios. Como posso te ajudar?",
-    },
-  ]);
+export const AITeacherChat = ({ isOpen, onClose, onMessagesChange, initialMessages }: AITeacherChatProps) => {
+  const [messages, setMessages] = useState<Message[]>(
+    initialMessages || [
+      {
+        role: "assistant",
+        content: "Olá! Sou seu professor particular de IA. Pode me perguntar qualquer coisa sobre matemática ou tirar dúvidas sobre os exercícios. Como posso te ajudar?",
+      },
+    ]
+  );
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Sync external messages
+  useEffect(() => {
+    if (initialMessages && initialMessages.length !== messages.length) {
+      setMessages(initialMessages);
+    }
+  }, [initialMessages?.length]);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+    onMessagesChange?.(messages);
+  }, [messages, onMessagesChange]);
 
   const streamChat = async (userMessage: string) => {
     const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;

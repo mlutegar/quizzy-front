@@ -10,10 +10,11 @@ interface HintSystemProps {
   problem: string;
   workShown: string;
   onHintUsed?: (hintLevel: number) => void;
+  onHintGenerated?: (hint: string) => void;
   className?: string;
 }
 
-export const HintSystem = ({ problem, workShown, onHintUsed, className }: HintSystemProps) => {
+export const HintSystem = ({ problem, workShown, onHintUsed, onHintGenerated, className }: HintSystemProps) => {
   const [hints, setHints] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -30,6 +31,7 @@ export const HintSystem = ({ problem, workShown, onHintUsed, className }: HintSy
       if (data?.hint) {
         setHints(prev => [...prev, data.hint]);
         onHintUsed?.(hints.length + 1);
+        onHintGenerated?.(data.hint);
       }
     } catch (error: any) {
       console.error('Error generating hint:', error);

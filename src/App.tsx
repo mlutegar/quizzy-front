@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -15,8 +15,24 @@ import { AITeacherChat } from "./components/AITeacherChat";
 
 const queryClient = new QueryClient();
 
+interface Message {
+  role: "user" | "assistant";
+  content: string;
+}
+
 const App = () => {
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<Message[]>([
+    {
+      role: "assistant",
+      content: "Olá! Sou seu professor particular de IA. Pode me perguntar qualquer coisa sobre matemática ou tirar dúvidas sobre os exercícios. Como posso te ajudar?",
+    },
+  ]);
+
+  const addMessageToChat = useCallback((role: "user" | "assistant", content: string) => {
+    setChatMessages(prev => [...prev, { role, content }]);
+    setIsChatOpen(true);
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -31,7 +47,7 @@ const App = () => {
                 <Route path="/" element={<Home />} />
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/matematica" element={<Subject />} />
-                <Route path="/quiz/:topicId" element={<Quiz />} />
+                <Route path="/quiz/:topicId" element={<Quiz addMessageToChat={addMessageToChat} />} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Routes>
@@ -43,7 +59,12 @@ const App = () => {
                 isChatOpen ? "w-96" : "w-0"
               } overflow-hidden`}
             >
-              <AITeacherChat isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
+            <AITeacherChat 
+              isOpen={isChatOpen} 
+              onClose={() => setIsChatOpen(false)}
+              onMessagesChange={setChatMessages}
+              initialMessages={chatMessages}
+            />
             </div>
 
             {/* Floating Chat Toggle Button */}

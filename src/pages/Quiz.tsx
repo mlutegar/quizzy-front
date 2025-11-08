@@ -23,7 +23,11 @@ interface Question {
   prerequisites: string[];
 }
 
-const Quiz = () => {
+interface QuizProps {
+  addMessageToChat?: (role: "user" | "assistant", content: string) => void;
+}
+
+const Quiz = ({ addMessageToChat }: QuizProps) => {
   const { topicId } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -92,6 +96,9 @@ const Quiz = () => {
       return;
     }
 
+    // Enviar para o chat
+    addMessageToChat?.("user", `Verificar resposta: ${userAnswer}`);
+
     setChecking(true);
     const correct = userAnswer.trim().toLowerCase() === currentQuestion.correct_answer.toLowerCase();
     setIsCorrect(correct);
@@ -131,6 +138,7 @@ const Quiz = () => {
 
         if (error) throw error;
         setAiFeedback(data.feedback);
+        addMessageToChat?.("assistant", data.feedback);
       } catch (error: any) {
         console.error("Error getting AI feedback:", error);
         setAiFeedback("Não consegui analisar seu erro no momento. Tente novamente mais tarde.");
@@ -264,6 +272,10 @@ const Quiz = () => {
                 problem={currentQuestion.question_text}
                 workShown={workShown}
                 onHintUsed={(level) => setHintsUsed(level)}
+                onHintGenerated={(hint) => {
+                  addMessageToChat?.("user", "Preciso de uma dica");
+                  addMessageToChat?.("assistant", hint);
+                }}
               />
             )}
 
