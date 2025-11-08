@@ -219,17 +219,22 @@ const Quiz = ({ addMessageToChat, setSessionId }: QuizProps) => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      const submitBody = {
+        question_id: adaptiveQuestion.id,
+        question: adaptiveQuestion.problem,
+        student_answer: userAnswer,
+        correct_answer: adaptiveQuestion.answer,
+        solution_steps: adaptiveQuestion.steps,
+        concepts_tested: adaptiveQuestion.concepts,
+      };
+
+      console.log("📡 POST para:", `${FLASK_API_URL}/adaptive/${user.id}/submit`);
+      console.log("📤 POST BODY:", JSON.stringify(submitBody, null, 2));
+
       const response = await fetch(`${FLASK_API_URL}/adaptive/${user.id}/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          question_id: adaptiveQuestion.id,
-          question: adaptiveQuestion.problem,
-          student_answer: userAnswer,
-          correct_answer: adaptiveQuestion.answer,
-          solution_steps: adaptiveQuestion.steps,
-          concepts_tested: adaptiveQuestion.concepts,
-        }),
+        body: JSON.stringify(submitBody),
       });
 
       if (!response.ok) throw new Error("Erro ao submeter resposta");

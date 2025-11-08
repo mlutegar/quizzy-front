@@ -69,16 +69,21 @@ const Diagnostic = () => {
     }
 
     try {
+      const startBody = {
+        student_id: studentId,
+        topic_id: topicId,
+        questions_per_topic: 3,
+      };
+
+      console.log("📡 POST para:", `${FLASK_API_URL}/diagnostic/start`);
+      console.log("📤 POST BODY:", JSON.stringify(startBody, null, 2));
+
       const response = await fetch(`${FLASK_API_URL}/diagnostic/start`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          student_id: studentId,
-          topic_id: topicId,
-          questions_per_topic: 3,
-        }),
+        body: JSON.stringify(startBody),
       });
 
       if (!response.ok) throw new Error("Erro ao iniciar teste diagnóstico");
@@ -118,15 +123,20 @@ const Diagnostic = () => {
       }
 
       // Generate questions
+      const generateBody = {
+        count: 10,
+        difficulty: difficulty,
+      };
+
+      console.log("📡 POST para:", `${FLASK_API_URL}/questions/generate`);
+      console.log("📤 POST BODY:", JSON.stringify(generateBody, null, 2));
+
       const generateResponse = await fetch(`${FLASK_API_URL}/questions/generate`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          count: 10,
-          difficulty: difficulty,
-        }),
+        body: JSON.stringify(generateBody),
       });
 
       if (!generateResponse.ok) throw new Error("Erro ao gerar questões");
@@ -229,15 +239,20 @@ const Diagnostic = () => {
         return;
       }
 
+      const submitBody = {
+        question_id: currentQuestion.question_id,
+        answer: userAnswer,
+      };
+
+      console.log("📡 POST para:", `${FLASK_API_URL}/diagnostic/${studentId}/submit`);
+      console.log("📤 POST BODY:", JSON.stringify(submitBody, null, 2));
+
       const response = await fetch(`${FLASK_API_URL}/diagnostic/${studentId}/submit`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          question_id: currentQuestion.question_id,
-          answer: userAnswer,
-        }),
+        body: JSON.stringify(submitBody),
       });
 
       if (!response.ok) throw new Error("Erro ao submeter resposta");
@@ -303,15 +318,20 @@ const Diagnostic = () => {
       }
 
       // Submit empty answer to API so it knows we're skipping
+      const skipBody = {
+        question_id: currentQuestion.question_id,
+        answer: "", // Empty answer = skipped
+      };
+
+      console.log("📡 POST para (skip):", `${FLASK_API_URL}/diagnostic/${studentId}/submit`);
+      console.log("📤 POST BODY:", JSON.stringify(skipBody, null, 2));
+
       await fetch(`${FLASK_API_URL}/diagnostic/${studentId}/submit`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          question_id: currentQuestion.question_id,
-          answer: "", // Empty answer = skipped
-        }),
+        body: JSON.stringify(skipBody),
       });
 
       // Save skipped answer to Supabase as incorrect

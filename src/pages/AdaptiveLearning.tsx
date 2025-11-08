@@ -93,17 +93,20 @@ const AdaptiveLearning = () => {
         console.log("⚠️ Nenhum diagnóstico encontrado");
       }
       
+      const startBody = {
+        student_id: user.id,
+        learning_path: "intermediate",
+        has_diagnostic: hasDiagnostic,
+        topic_id: topicId
+      };
+      
       console.log("📡 Chamando API:", `${FLASK_API_URL}/adaptive/start`);
+      console.log("📤 POST BODY:", JSON.stringify(startBody, null, 2));
       
       const response = await fetch(`${FLASK_API_URL}/adaptive/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          student_id: user.id,
-          learning_path: "intermediate",
-          has_diagnostic: hasDiagnostic,
-          topic_id: topicId
-        }),
+        body: JSON.stringify(startBody),
       });
 
       console.log("📨 Resposta status:", response.status);
@@ -217,17 +220,22 @@ const AdaptiveLearning = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      const submitBody = {
+        question_id: currentQuestion.id,
+        question: currentQuestion.problem,
+        student_answer: userAnswer,
+        correct_answer: String(currentQuestion.answer),
+        solution_steps: currentQuestion.steps,
+        concepts_tested: currentQuestion.concepts,
+      };
+
+      console.log("📡 POST para:", `${FLASK_API_URL}/adaptive/${user.id}/submit`);
+      console.log("📤 POST BODY:", JSON.stringify(submitBody, null, 2));
+
       const response = await fetch(`${FLASK_API_URL}/adaptive/${user.id}/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          question_id: currentQuestion.id,
-          question: currentQuestion.problem,
-          student_answer: userAnswer,
-          correct_answer: String(currentQuestion.answer),
-          solution_steps: currentQuestion.steps,
-          concepts_tested: currentQuestion.concepts,
-        }),
+        body: JSON.stringify(submitBody),
       });
 
       if (!response.ok) throw new Error("Erro ao submeter resposta");
