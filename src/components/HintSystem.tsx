@@ -1,22 +1,33 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Lightbulb, Loader2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Lightbulb, Loader2, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+
+interface HintData {
+  question: string;
+  session_id: string;
+  hint_level: number;
+  phase: string;
+}
 
 interface HintSystemProps {
   problem: string;
   workShown: string;
   onHintUsed?: (hintLevel: number) => void;
   onHintGenerated?: (hint: string) => void;
+  onResponseSubmitted?: (response: string) => void;
   className?: string;
 }
 
-export const HintSystem = ({ problem, workShown, onHintUsed, onHintGenerated, className }: HintSystemProps) => {
-  const [hints, setHints] = useState<string[]>([]);
+export const HintSystem = ({ problem, workShown, onHintUsed, onHintGenerated, onResponseSubmitted, className }: HintSystemProps) => {
+  const [hints, setHints] = useState<HintData[]>([]);
+  const [currentResponse, setCurrentResponse] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isSubmittingResponse, setIsSubmittingResponse] = useState(false);
   const { toast } = useToast();
 
   const generateHint = async () => {
@@ -28,10 +39,10 @@ export const HintSystem = ({ problem, workShown, onHintUsed, onHintGenerated, cl
 
       if (error) throw error;
 
-      if (data?.hint) {
-        setHints(prev => [...prev, data.hint]);
+      if (data?.question) {
+        setHints(prev => [...prev, data]);
         onHintUsed?.(hints.length + 1);
-        onHintGenerated?.(data.hint);
+        onHintGenerated?.(data.question);
       }
     } catch (error: any) {
       console.error('Error generating hint:', error);
@@ -42,6 +53,48 @@ export const HintSystem = ({ problem, workShown, onHintUsed, onHintGenerated, cl
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const submitResponse = async (hintIndex: number) => {
+    if (!currentResponse.trim()) return;
+
+    setIsSubmittingResponse(true);
+    try {
+      const hint = hints[hintIndex];
+      
+      // Send user response to chat
+      onResponseSubmitted?.(currentResponse);
+      
+      const { data, error } = await supabase.functions.invoke('generate-hint', {
+        body: { 
+          response: currentResponse,
+          session_id: hint.session_id
+        }
+      });
+
+      if (error) throw error;
+
+      // Add the new hint from the response
+      if (data?.question) {
+        setHints(prev => [...prev, data]);
+        onHintGenerated?.(data.question);
+      }
+
+      setCurrentResponse("");
+      toast({
+        title: "Resposta enviada!",
+        description: "O professor está analisando sua resposta...",
+      });
+    } catch (error: any) {
+      console.error('Error submitting response:', error);
+      toast({
+        title: "Erro ao enviar resposta",
+        description: error.message || "Tente novamente em alguns instantes",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmittingResponse(false);
     }
   };
 
@@ -91,11 +144,41 @@ export const HintSystem = ({ problem, workShown, onHintUsed, onHintGenerated, cl
                   index === 1 && "text-warning",
                   index === 2 && "text-success"
                 )} />
-                <div className="space-y-1">
-                  <p className="text-xs font-semibold text-muted-foreground">
-                    {getHintLabel(index)}
-                  </p>
-                  <p className="text-sm text-foreground">{hint}</p>
+                <div className="space-y-3 flex-1">
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-muted-foreground">
+                      {getHintLabel(index)}
+                    </p>
+                    <p className="text-sm text-foreground">{hint.question}</p>
+                  </div>
+                  
+                  {/* Response input for the last hint */}
+                  {index === hints.length - 1 && (
+                    <div className="flex gap-2">
+                      <Input
+                        value={currentResponse}
+                        onChange={(e) => setCurrentResponse(e.target.value)}
+                        placeholder="Digite sua resposta..."
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !isSubmittingResponse) {
+                            submitResponse(index);
+                          }
+                        }}
+                        disabled={isSubmittingResponse}
+                      />
+                      <Button
+                        size="icon"
+                        onClick={() => submitResponse(index)}
+                        disabled={isSubmittingResponse || !currentResponse.trim()}
+                      >
+                        {isSubmittingResponse ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Send className="w-4 h-4" />
+                        )}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
             </Card>

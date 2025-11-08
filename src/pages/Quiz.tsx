@@ -276,6 +276,9 @@ const Quiz = ({ addMessageToChat }: QuizProps) => {
                   addMessageToChat?.("user", "Preciso de uma dica");
                   addMessageToChat?.("assistant", hint);
                 }}
+                onResponseSubmitted={(response) => {
+                  addMessageToChat?.("user", response);
+                }}
               />
             )}
 
