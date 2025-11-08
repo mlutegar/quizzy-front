@@ -45,6 +45,11 @@ const Quiz = ({ addMessageToChat, setSessionId }: QuizProps) => {
   const [isCorrect, setIsCorrect] = useState(false);
   const [aiFeedback, setAiFeedback] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
+  
+  // Adaptive Learning States
+  const [isAdaptiveMode, setIsAdaptiveMode] = useState(false);
+  const [adaptiveQuestion, setAdaptiveQuestion] = useState<any>(null);
+  const [adaptiveLoading, setAdaptiveLoading] = useState(false);
 
   const currentQuestion = questions[currentIndex];
   const correctCount = answers.filter(a => a === true).length;
@@ -160,6 +165,8 @@ const Quiz = ({ addMessageToChat, setSessionId }: QuizProps) => {
       setHintsUsed(0);
       setShowFeedback(false);
       setAiFeedback("");
+      setIsAdaptiveMode(false);
+      setAdaptiveQuestion(null);
     } else {
       // Quiz completed
       const finalCorrect = answers.filter(a => a === true).length;
@@ -171,6 +178,141 @@ const Quiz = ({ addMessageToChat, setSessionId }: QuizProps) => {
       }
       navigate(-1);
     }
+  };
+
+  const FLASK_API_URL = "http://localhost:5000";
+
+  const startAdaptiveSession = async () => {
+    setAdaptiveLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const response = await fetch(`${FLASK_API_URL}/adaptive/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          student_id: user.id,
+          learning_path: "intermediate"
+        }),
+      });
+
+      if (!response.ok) throw new Error("Erro ao iniciar sessão adaptativa");
+
+      const data = await response.json();
+      
+      if (data.status === "ready") {
+        toast({
+          title: "Sessão Adaptativa Iniciada",
+          description: `Vamos trabalhar: ${data.topic_name}`,
+        });
+        await getAdaptiveQuestion();
+      }
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setAdaptiveLoading(false);
+    }
+  };
+
+  const getAdaptiveQuestion = async () => {
+    setAdaptiveLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const response = await fetch(`${FLASK_API_URL}/adaptive/${user.id}/next`);
+      if (!response.ok) throw new Error("Erro ao obter questão");
+
+      const data = await response.json();
+      setAdaptiveQuestion(data);
+      setIsAdaptiveMode(true);
+      setUserAnswer("");
+      setWorkShown("");
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setAdaptiveLoading(false);
+    }
+  };
+
+  const submitAdaptiveAnswer = async () => {
+    if (!userAnswer.trim() || !adaptiveQuestion) return;
+
+    setChecking(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const response = await fetch(`${FLASK_API_URL}/adaptive/${user.id}/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question_id: adaptiveQuestion.id,
+          question: adaptiveQuestion.problem,
+          student_answer: userAnswer,
+          correct_answer: adaptiveQuestion.answer,
+          solution_steps: adaptiveQuestion.steps,
+          concepts_tested: adaptiveQuestion.concepts,
+        }),
+      });
+
+      if (!response.ok) throw new Error("Erro ao submeter resposta");
+
+      const data = await response.json();
+      setIsCorrect(data.is_correct);
+      setShowFeedback(true);
+
+      if (data.error_analysis) {
+        setAiFeedback(data.error_analysis.explanation);
+      }
+
+      if (data.status === "topic_mastered") {
+        toast({
+          title: "🎉 Tópico Dominado!",
+          description: data.message,
+        });
+        setTimeout(() => {
+          setIsAdaptiveMode(false);
+          setAdaptiveQuestion(null);
+          setShowFeedback(false);
+        }, 3000);
+      } else if (data.status === "prerequisite_required") {
+        toast({
+          title: "Pré-requisito necessário",
+          description: data.message,
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const handleNextAdaptive = async () => {
+    setShowFeedback(false);
+    await getAdaptiveQuestion();
+  };
+
+  const exitAdaptiveMode = () => {
+    setIsAdaptiveMode(false);
+    setAdaptiveQuestion(null);
+    setShowFeedback(false);
+    setUserAnswer("");
+    setWorkShown("");
   };
 
   if (loading) {
@@ -221,13 +363,20 @@ const Quiz = ({ addMessageToChat, setSessionId }: QuizProps) => {
         {/* Question Card */}
         <Card className="mb-6">
           <CardHeader>
+            {isAdaptiveMode && (
+              <div className="mb-4 bg-primary/10 text-primary px-4 py-2 rounded-md text-sm font-medium">
+                🧠 Modo de Aprendizagem Adaptativa
+              </div>
+            )}
             <CardTitle className="text-xl leading-relaxed">
-              {currentQuestion.question_text}
+              {isAdaptiveMode && adaptiveQuestion
+                ? adaptiveQuestion.problem
+                : currentQuestion.question_text}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Answer Input */}
-            {currentQuestion.question_type === "multiple_choice" && currentQuestion.options ? (
+            {!isAdaptiveMode && currentQuestion.question_type === "multiple_choice" && currentQuestion.options ? (
               <RadioGroup value={userAnswer} onValueChange={setUserAnswer}>
                 <div className="space-y-3">
                   {currentQuestion.options.map((option, index) => (
@@ -267,8 +416,8 @@ const Quiz = ({ addMessageToChat, setSessionId }: QuizProps) => {
               />
             </div>
 
-            {/* Hint System */}
-            {!showFeedback && (
+            {/* Hint System - Only in regular mode */}
+            {!showFeedback && !isAdaptiveMode && (
               <HintSystem
                 problem={currentQuestion.question_text}
                 workShown={workShown}
@@ -303,11 +452,28 @@ const Quiz = ({ addMessageToChat, setSessionId }: QuizProps) => {
                       <h3 className="font-semibold text-lg mb-2">
                         {isCorrect ? "Resposta Correta! 🎉" : "Resposta Incorreta"}
                       </h3>
-                      <p className="text-sm mb-3">{currentQuestion.explanation}</p>
+                      
+                      {!isAdaptiveMode && (
+                        <p className="text-sm mb-3">{currentQuestion.explanation}</p>
+                      )}
+
+                      {isAdaptiveMode && adaptiveQuestion && (
+                        <div className="space-y-2 mb-3">
+                          <p className="text-sm font-semibold">✓ Resposta correta: {adaptiveQuestion.answer}</p>
+                          <div className="text-sm">
+                            <p className="font-semibold mb-1">📝 Passos da solução:</p>
+                            <ol className="list-decimal list-inside space-y-1">
+                              {adaptiveQuestion.steps.map((step: string, idx: number) => (
+                                <li key={idx}>{step}</li>
+                              ))}
+                            </ol>
+                          </div>
+                        </div>
+                      )}
                       
                       {!isCorrect && (
                         <div className="space-y-2">
-                          <p className="text-sm font-semibold">💡 Feedback do Professor IA:</p>
+                          <p className="text-sm font-semibold">💡 Análise do Erro:</p>
                           {aiLoading ? (
                             <div className="flex items-center gap-2">
                               <Loader2 className="w-4 h-4 animate-spin" />
@@ -320,6 +486,24 @@ const Quiz = ({ addMessageToChat, setSessionId }: QuizProps) => {
                       )}
                     </div>
                   </div>
+
+                  {/* Adaptive Learning Button - Only show when not in adaptive mode and answer is incorrect */}
+                  {!isCorrect && !isAdaptiveMode && !adaptiveLoading && (
+                    <Button
+                      onClick={startAdaptiveSession}
+                      variant="outline"
+                      className="w-full mt-4"
+                    >
+                      🧠 Gerar Questões Adaptativas
+                    </Button>
+                  )}
+
+                  {adaptiveLoading && (
+                    <div className="flex items-center justify-center gap-2 mt-4">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span className="text-sm">Preparando questões adaptativas...</span>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}
@@ -327,7 +511,7 @@ const Quiz = ({ addMessageToChat, setSessionId }: QuizProps) => {
             {/* Actions */}
             {!showFeedback ? (
               <Button
-                onClick={handleCheckAnswer}
+                onClick={isAdaptiveMode ? submitAdaptiveAnswer : handleCheckAnswer}
                 disabled={checking || !userAnswer}
                 className="w-full"
                 size="lg"
@@ -342,9 +526,22 @@ const Quiz = ({ addMessageToChat, setSessionId }: QuizProps) => {
                 )}
               </Button>
             ) : (
-              <Button onClick={handleNext} className="w-full" size="lg">
-                {currentIndex < questions.length - 1 ? "Próxima Questão" : "Finalizar"}
-              </Button>
+              <div className="space-y-2">
+                {isAdaptiveMode ? (
+                  <>
+                    <Button onClick={handleNextAdaptive} className="w-full" size="lg">
+                      Próxima Questão Adaptativa
+                    </Button>
+                    <Button onClick={exitAdaptiveMode} variant="outline" className="w-full" size="lg">
+                      Voltar para Questões Normais
+                    </Button>
+                  </>
+                ) : (
+                  <Button onClick={handleNext} className="w-full" size="lg">
+                    {currentIndex < questions.length - 1 ? "Próxima Questão" : "Finalizar"}
+                  </Button>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>
