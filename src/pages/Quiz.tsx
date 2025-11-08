@@ -1,0 +1,340 @@
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
+import { QuestionIndicators } from "@/components/QuestionIndicators";
+import { HintSystem } from "@/components/HintSystem";
+import { supabase } from "@/integrations/supabase/client";
+import { ArrowLeft, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
+
+interface Question {
+  id: string;
+  question_text: string;
+  question_type: "multiple_choice" | "open";
+  options: string[] | null;
+  correct_answer: string;
+  explanation: string;
+  prerequisites: string[];
+}
+
+const Quiz = () => {
+  const { topicId } = useParams();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [answers, setAnswers] = useState<(boolean | null)[]>([null, null, null, null, null]);
+  const [userAnswer, setUserAnswer] = useState("");
+  const [workShown, setWorkShown] = useState("");
+  const [hintsUsed, setHintsUsed] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [checking, setChecking] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [isCorrect, setIsCorrect] = useState(false);
+  const [aiFeedback, setAiFeedback] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+
+  const currentQuestion = questions[currentIndex];
+  const correctCount = answers.filter(a => a === true).length;
+  const remainingToMaster = 5 - correctCount;
+
+  useEffect(() => {
+    if (topicId) {
+      loadQuestions();
+    }
+  }, [topicId]);
+
+  const loadQuestions = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("questions")
+        .select("*")
+        .eq("topic_id", topicId)
+        .limit(5);
+
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        toast({
+          title: "Nenhuma questão disponível",
+          description: "Este tópico ainda não possui questões cadastradas.",
+          variant: "destructive",
+        });
+        navigate(-1);
+        return;
+      }
+
+      setQuestions(data as Question[]);
+    } catch (error: any) {
+      toast({
+        title: "Erro ao carregar questões",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCheckAnswer = async () => {
+    if (!userAnswer.trim()) {
+      toast({
+        title: "Resposta vazia",
+        description: "Por favor, responda à questão antes de verificar.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setChecking(true);
+    const correct = userAnswer.trim().toLowerCase() === currentQuestion.correct_answer.toLowerCase();
+    setIsCorrect(correct);
+
+    // Save answer
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await supabase.from("user_answers").insert({
+        user_id: user.id,
+        question_id: currentQuestion.id,
+        topic_id: topicId!,
+        user_answer: userAnswer,
+        is_correct: correct,
+        work_shown: workShown,
+        hints_used: hintsUsed,
+      });
+    }
+
+    // Update answers array
+    const newAnswers = [...answers];
+    newAnswers[currentIndex] = correct;
+    setAnswers(newAnswers);
+
+    // If incorrect, get AI feedback
+    if (!correct) {
+      setAiLoading(true);
+      try {
+        const { data, error } = await supabase.functions.invoke("analyze-error", {
+          body: {
+            question: currentQuestion.question_text,
+            studentAnswer: userAnswer,
+            correctAnswer: currentQuestion.correct_answer,
+            workShown: workShown,
+            prerequisites: currentQuestion.prerequisites,
+          },
+        });
+
+        if (error) throw error;
+        setAiFeedback(data.feedback);
+      } catch (error: any) {
+        console.error("Error getting AI feedback:", error);
+        setAiFeedback("Não consegui analisar seu erro no momento. Tente novamente mais tarde.");
+      } finally {
+        setAiLoading(false);
+      }
+    }
+
+    setShowFeedback(true);
+    setChecking(false);
+  };
+
+  const handleNext = () => {
+    if (currentIndex < questions.length - 1) {
+      setCurrentIndex(currentIndex + 1);
+      setUserAnswer("");
+      setWorkShown("");
+      setHintsUsed(0);
+      setShowFeedback(false);
+      setAiFeedback("");
+    } else {
+      // Quiz completed
+      const finalCorrect = answers.filter(a => a === true).length;
+      if (finalCorrect === 5) {
+        toast({
+          title: "🎉 Parabéns! Tópico Dominado!",
+          description: "Você acertou 5 questões consecutivas!",
+        });
+      }
+      navigate(-1);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Gerando questões...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentQuestion) return null;
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-success/10">
+      <div className="container mx-auto px-4 py-8 max-w-3xl">
+        {/* Header */}
+        <div className="mb-6">
+          <Button variant="ghost" onClick={() => navigate(-1)} className="mb-4 gap-2">
+            <ArrowLeft className="w-4 h-4" />
+            Voltar
+          </Button>
+
+          {/* Progress */}
+          <div className="bg-card rounded-lg p-4 shadow-sm mb-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold">
+                Questão {currentIndex + 1} de {questions.length}
+              </h2>
+              <div className="text-sm">
+                <span className="text-success font-semibold">✓ {correctCount}</span>
+                <span className="text-muted-foreground mx-2">|</span>
+                <span className="text-muted-foreground">
+                  Faltam {remainingToMaster} para dominar
+                </span>
+              </div>
+            </div>
+            <QuestionIndicators
+              total={5}
+              current={currentIndex}
+              answers={answers}
+            />
+          </div>
+        </div>
+
+        {/* Question Card */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-xl leading-relaxed">
+              {currentQuestion.question_text}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Answer Input */}
+            {currentQuestion.question_type === "multiple_choice" && currentQuestion.options ? (
+              <RadioGroup value={userAnswer} onValueChange={setUserAnswer}>
+                <div className="space-y-3">
+                  {currentQuestion.options.map((option, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center space-x-3 p-3 rounded-lg border hover:bg-accent transition-colors"
+                    >
+                      <RadioGroupItem value={option} id={`option-${index}`} />
+                      <Label htmlFor={`option-${index}`} className="flex-1 cursor-pointer">
+                        {option}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+              </RadioGroup>
+            ) : (
+              <div className="space-y-2">
+                <Label>Sua resposta</Label>
+                <Input
+                  value={userAnswer}
+                  onChange={(e) => setUserAnswer(e.target.value)}
+                  placeholder="Digite sua resposta..."
+                  disabled={showFeedback}
+                />
+              </div>
+            )}
+
+            {/* Work Area */}
+            <div className="space-y-2">
+              <Label>Desenvolvimento / Cálculos (opcional)</Label>
+              <Textarea
+                value={workShown}
+                onChange={(e) => setWorkShown(e.target.value)}
+                placeholder="Mostre seu raciocínio..."
+                className="min-h-[100px]"
+                disabled={showFeedback}
+              />
+            </div>
+
+            {/* Hint System */}
+            {!showFeedback && (
+              <HintSystem
+                hints={[
+                  "Pense sobre o conceito fundamental envolvido nesta questão.",
+                  currentQuestion.explanation?.substring(0, 100) + "...",
+                  currentQuestion.explanation || "A resposta correta é: " + currentQuestion.correct_answer,
+                ]}
+                onHintUsed={(level) => setHintsUsed(level)}
+              />
+            )}
+
+            {/* Feedback */}
+            {showFeedback && (
+              <Card className={cn(
+                "border-l-4",
+                isCorrect ? "border-l-success bg-success-light" : "border-l-error bg-error-light"
+              )}>
+                <CardContent className="pt-6">
+                  <div className="flex items-start gap-3 mb-4">
+                    {isCorrect ? (
+                      <CheckCircle className="w-6 h-6 text-success flex-shrink-0" />
+                    ) : (
+                      <XCircle className="w-6 h-6 text-error flex-shrink-0" />
+                    )}
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-lg mb-2">
+                        {isCorrect ? "Resposta Correta! 🎉" : "Resposta Incorreta"}
+                      </h3>
+                      <p className="text-sm mb-3">{currentQuestion.explanation}</p>
+                      
+                      {!isCorrect && (
+                        <div className="space-y-2">
+                          <p className="text-sm font-semibold">💡 Feedback do Professor IA:</p>
+                          {aiLoading ? (
+                            <div className="flex items-center gap-2">
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <span className="text-sm">Analisando seu erro...</span>
+                            </div>
+                          ) : (
+                            <p className="text-sm whitespace-pre-wrap">{aiFeedback}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Actions */}
+            {!showFeedback ? (
+              <Button
+                onClick={handleCheckAnswer}
+                disabled={checking || !userAnswer}
+                className="w-full"
+                size="lg"
+              >
+                {checking ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Verificando...
+                  </>
+                ) : (
+                  "Verificar Resposta"
+                )}
+              </Button>
+            ) : (
+              <Button onClick={handleNext} className="w-full" size="lg">
+                {currentIndex < questions.length - 1 ? "Próxima Questão" : "Finalizar"}
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+};
+
+export default Quiz;
