@@ -93,6 +93,14 @@ const AdaptiveLearning = () => {
           description: `Vamos trabalhar: ${data.topic_name}`,
         });
         await getNextQuestion(user.id);
+      } else if (data.status === "diagnostic_required") {
+        console.log("⚠️ Diagnóstico necessário");
+        toast({
+          title: "Diagnóstico Necessário",
+          description: data.message || "Complete o teste diagnóstico primeiro",
+          variant: "destructive",
+        });
+        navigate("/diagnostic");
       } else if (data.status === "completed") {
         toast({
           title: "Parabéns!",
