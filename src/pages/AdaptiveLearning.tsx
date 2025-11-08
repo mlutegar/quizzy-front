@@ -186,6 +186,17 @@ const AdaptiveLearning = () => {
   const requestHint = async () => {
     if (!currentQuestion || !studentId) return;
 
+    // Validar dados antes de enviar
+    if (!currentQuestion.id || !currentQuestion.problem) {
+      toast({
+        title: "Erro",
+        description: "Dados da questão incompletos",
+        variant: "destructive",
+      });
+      console.error("❌ Questão incompleta:", currentQuestion);
+      return;
+    }
+
     setLoadingHint(true);
     try {
       const hintBody = {
@@ -196,6 +207,8 @@ const AdaptiveLearning = () => {
 
       console.log("📡 POST para:", `${FLASK_API_URL}/adaptive/${studentId}/hint`);
       console.log("📤 POST BODY:", JSON.stringify(hintBody, null, 2));
+      console.log("🔍 Tipo de question_id:", typeof currentQuestion.id);
+      console.log("🔍 Tipo de question:", typeof currentQuestion.problem);
 
       const response = await fetch(`${FLASK_API_URL}/adaptive/${studentId}/hint`, {
         method: "POST",
@@ -206,7 +219,8 @@ const AdaptiveLearning = () => {
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
         console.error("❌ Erro ao obter dica:", errorData);
-        throw new Error(errorData?.error || "Erro ao obter dica");
+        console.error("❌ Status:", response.status);
+        throw new Error(errorData?.error || `Erro ${response.status} ao obter dica`);
       }
 
       const data: HintResponse = await response.json();
@@ -219,9 +233,10 @@ const AdaptiveLearning = () => {
         description: "Confira a dica abaixo da questão",
       });
     } catch (error: any) {
+      console.error("💥 Erro completo:", error);
       toast({
         title: "Erro ao obter dica",
-        description: error.message,
+        description: error.message || "Erro desconhecido no servidor",
         variant: "destructive",
       });
     } finally {
