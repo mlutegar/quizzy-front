@@ -50,8 +50,10 @@ const AdaptiveLearning = () => {
 
   const startAdaptiveSession = async () => {
     try {
+      console.log("🚀 Iniciando sessão adaptativa...");
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
+        console.error("❌ Usuário não autenticado");
         toast({
           title: "Erro",
           description: "Você precisa estar logado",
@@ -61,6 +63,9 @@ const AdaptiveLearning = () => {
         return;
       }
 
+      console.log("👤 Usuário ID:", user.id);
+      console.log("📡 Chamando API:", `${FLASK_API_URL}/adaptive/start`);
+      
       const response = await fetch(`${FLASK_API_URL}/adaptive/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -70,9 +75,16 @@ const AdaptiveLearning = () => {
         }),
       });
 
-      if (!response.ok) throw new Error("Erro ao iniciar sessão adaptativa");
+      console.log("📨 Resposta status:", response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("❌ Erro na resposta:", errorText);
+        throw new Error("Erro ao iniciar sessão adaptativa");
+      }
 
       const data = await response.json();
+      console.log("📦 Dados recebidos:", data);
       
       if (data.status === "ready") {
         setTopicName(data.topic_name || "Aprendizagem Adaptativa");
@@ -103,10 +115,20 @@ const AdaptiveLearning = () => {
   const getNextQuestion = async (userId: string) => {
     setLoading(true);
     try {
+      console.log("🔍 Buscando próxima questão para:", userId);
+      console.log("📡 URL:", `${FLASK_API_URL}/adaptive/${userId}/next`);
+      
       const response = await fetch(`${FLASK_API_URL}/adaptive/${userId}/next`);
-      if (!response.ok) throw new Error("Erro ao obter questão");
+      console.log("📨 Status resposta:", response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("❌ Erro na resposta:", errorText);
+        throw new Error("Erro ao obter questão");
+      }
 
       const data = await response.json();
+      console.log("📦 Questão recebida:", data);
       setCurrentQuestion(data);
       
       // Save question to Supabase for later practice
@@ -129,12 +151,14 @@ const AdaptiveLearning = () => {
         if (error) console.error("Erro ao salvar questão:", error);
       }
     } catch (error: any) {
+      console.error("💥 Erro ao buscar questão:", error);
       toast({
         title: "Erro",
         description: error.message,
         variant: "destructive",
       });
     } finally {
+      console.log("✅ Finalizando carregamento");
       setLoading(false);
     }
   };
