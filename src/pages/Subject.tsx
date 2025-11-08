@@ -75,7 +75,13 @@ const Subject = () => {
   };
 
   const handleStartQuiz = (topicId: string) => {
-    navigate(`/quiz/${topicId}`);
+    const topicProgress = progress[topicId];
+    // Se não tem progresso, precisa fazer diagnóstico primeiro
+    if (!topicProgress || topicProgress.total_attempts === 0) {
+      navigate(`/diagnostic/${topicId}`);
+    } else {
+      navigate(`/quiz/${topicId}`);
+    }
   };
 
   if (loading) {
@@ -104,37 +110,9 @@ const Subject = () => {
           </Button>
           <h1 className="text-3xl md:text-4xl font-bold mb-2">Matemática</h1>
           <p className="text-muted-foreground">
-            Escolha um tópico e comece a praticar. Acerte 5 questões consecutivas para dominar!
+            Cada tópico requer um teste diagnóstico antes de começar as questões. Acerte 5 questões consecutivas para dominar!
           </p>
         </div>
-
-        {/* Diagnostic Test Card */}
-        <Card className="mb-6 border-primary bg-gradient-to-br from-primary/10 to-primary/5">
-          <CardHeader>
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <span className="text-3xl">🔍</span>
-                <div>
-                  <CardTitle className="text-xl">Teste Diagnóstico</CardTitle>
-                  <CardDescription>
-                    Avalie seu conhecimento para receber um caminho personalizado
-                  </CardDescription>
-                </div>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <Button
-              onClick={() => navigate("/diagnostic")}
-              className="w-full gap-2"
-              size="lg"
-              variant="default"
-            >
-              <Play className="w-4 h-4" />
-              Começar Teste Diagnóstico
-            </Button>
-          </CardContent>
-        </Card>
 
         {/* Topics List */}
         <div className="space-y-4">
@@ -178,7 +156,9 @@ const Subject = () => {
                       size="lg"
                     >
                       <Play className="w-4 h-4" />
-                      Gerar Simulado (5 questões)
+                      {(!topicProgress || topicProgress.total_attempts === 0) 
+                        ? "Iniciar Diagnóstico" 
+                        : "Gerar Simulado (5 questões)"}
                     </Button>
                   </div>
                 </CardContent>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -40,9 +40,11 @@ interface DiagnosticResponse {
 }
 
 const Diagnostic = () => {
+  const { topicId } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
   const studentId = "student_123"; // TODO: Get from auth context
+  const [topicName, setTopicName] = useState("");
   
   const [currentQuestion, setCurrentQuestion] = useState<DiagnosticQuestion | null>(null);
   const [questionNumber, setQuestionNumber] = useState(0);
@@ -60,6 +62,11 @@ const Diagnostic = () => {
   }, []);
 
   const startDiagnosticTest = async () => {
+    if (!topicId) {
+      navigate(-1);
+      return;
+    }
+
     try {
       const response = await fetch(`${FLASK_API_URL}/diagnostic/start`, {
         method: "POST",
@@ -68,6 +75,7 @@ const Diagnostic = () => {
         },
         body: JSON.stringify({
           student_id: studentId,
+          topic_id: topicId,
           questions_per_topic: 3,
         }),
       });
@@ -98,9 +106,10 @@ const Diagnostic = () => {
       if (data.status === "test_completed") {
         toast({
           title: "Teste Diagnóstico Completo!",
-          description: "Redirecionando para os resultados...",
+          description: "Redirecionando para as questões...",
         });
-        navigate(-1);
+        // Redireciona para o quiz do tópico após completar diagnóstico
+        navigate(`/quiz/${topicId}`);
         return;
       }
 
@@ -108,6 +117,7 @@ const Diagnostic = () => {
         setCurrentQuestion(data.question);
         setQuestionNumber(data.question_number || 1);
         setTotalQuestions(data.total_questions || 15);
+        setTopicName(data.question.topic_name || "");
         
         // Initialize answers array if needed
         if (answers.length === 0) {
@@ -161,13 +171,13 @@ const Diagnostic = () => {
 
       setShowFeedback(true);
 
-      // If test is completed, show results
+      // If test is completed, navigate to quiz
       if (data.status === "test_completed") {
         toast({
           title: "🎉 Teste Diagnóstico Completo!",
           description: data.diagnostic_results?.message || "Teste finalizado com sucesso!",
         });
-        // Could navigate to results page here
+        setTimeout(() => navigate(`/quiz/${topicId}`), 2000);
       }
     } catch (error: any) {
       toast({
@@ -219,9 +229,11 @@ const Diagnostic = () => {
               <div className="flex items-center gap-3">
                 <div className="text-3xl">🔍</div>
                 <div>
-                  <h2 className="text-lg font-semibold">Sessão de Diagnóstico</h2>
+                  <h2 className="text-lg font-semibold">
+                    Sessão de Diagnóstico {topicName && `- ${topicName}`}
+                  </h2>
                   <p className="text-sm text-muted-foreground">
-                    Este teste avalia seu conhecimento atual para personalizar seu aprendizado
+                    Este teste avalia seu conhecimento neste tópico para personalizar seu aprendizado
                   </p>
                 </div>
               </div>
